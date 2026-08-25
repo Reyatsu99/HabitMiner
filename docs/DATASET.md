@@ -4,7 +4,7 @@ This document details dataset structure, ingestion pipelines, file schemas, and 
 
 ---
 
-## 1. Dataset Overview
+## 1. Dataset Overview & Evaluation Considerations
 
 The [Microsoft GeoLife GPS Trajectory Dataset](https://www.microsoft.com/en-us/research/publication/geolife-gps-trajectory-dataset-user-guide/) contains 17,855 trajectories collected from 178 users over a period of 5 years (April 2007 to August 2012).
 
@@ -12,6 +12,11 @@ The [Microsoft GeoLife GPS Trajectory Dataset](https://www.microsoft.com/en-us/r
 - **Total Duration**: 50,000+ hours
 - **Sampling Rate**: 91.5% of trajectory points are logged every 1–5 seconds or 5–10 meters.
 - **Geographic Primary Region**: Beijing, China (with global travel tracks).
+
+### Dataset Characteristics & Bias Notes
+- **Transportation Focus**: ~30% of trajectories include ground-truth transport mode labels (walk, bike, bus, car, subway).
+- **User Demographics**: Collected predominantly by researchers and students in academic settings, resulting in structured work/campus routines.
+- **Trajectory Bounding**: Spatial filtering should be applied **per user trajectory** or per analysis target region rather than applying a strict global bounding box that discards travel/out-of-town routines.
 
 ---
 
@@ -83,10 +88,10 @@ To clean raw `.plt` files into standardized DataFrames, the `engine/parser.py` m
 
 1. **Header Stripping**: Skip the first 6 lines of each `.plt` file.
 2. **Timestamp Unification**: Merge `DateString` and `TimeString` into UTC datetime object `pandas.to_datetime(...)` and derive Unix timestamp (seconds).
-3. **Outlier Filtering**:
-   - Filter coordinates outside legitimate lat/lon bounds ($39.0 \le \text{lat} \le 41.5$, $115.5 \le \text{lon} \le 117.5$ for Beijing region).
+3. **Outlier & Velocity Filtering**:
+   - Filter invalid coordinate bounds ($\text{lat} \in [-90, 90]$, $\text{lon} \in [-180, 180]$).
    - Filter points with impossible point-to-point velocity ($> 150 \text{ km/h}$).
-4. **Trajectory Resampling**: For efficiency, downsample ultra-high frequency points (1s interval) to 10s intervals when user is in steady motion.
+4. **Per-User Processing**: Preserve complete user trajectory history across trips while removing single isolated outlier points.
 
 ### Reference Python Loader Snippet
 

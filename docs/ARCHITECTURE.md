@@ -1,6 +1,6 @@
 # HabitMiner: Architecture Specification 🏗️
 
-This document outlines the software architecture, data processing tiers, edge-computing privacy guarantees, and database design for **HabitMiner**.
+This document outlines the software architecture, data processing tiers, edge-computing privacy guarantees, database design, and cold-start mitigations for **HabitMiner**.
 
 ---
 
@@ -9,8 +9,8 @@ This document outlines the software architecture, data processing tiers, edge-co
 HabitMiner is engineered around three core principles:
 
 1. **Privacy-Preserving Edge Intelligence**: Raw GPS coordinates contain sensitive private information (home address, personal habits, medical visits). HabitMiner performs spatio-temporal clustering and routine discovery locally on the client device without transmitting raw coordinates to external cloud infrastructure.
-2. **Resource-Aware Pervasive Computing**: Continuous GPS polling drains smartphone battery rapidly. The system uses adaptive location sampling and batch stay point detection to balance context fidelity with energy conservation.
-3. **Interpretability & Explainability**: Rather than relying on opaque deep neural networks, HabitMiner utilizes transparent probabilistic models (Markov Chains) and Information Theory metrics (Shannon Entropy, KL-Divergence) that provide clear, inspectable behavioral indicators.
+2. **Resource-Aware Pervasive Computing**: Continuous GPS polling drains smartphone battery rapidly. The system leverages **Android Activity Recognition API** (e.g. `STILL`, `WALKING`, `IN_VEHICLE`) and geofencing transition triggers rather than aggressive timer-based GPS polling.
+3. **Interpretability & Explainability**: Rather than relying on opaque deep neural networks, HabitMiner utilizes transparent probabilistic models (Time-Conditioned Markov Chains) and Information Theory metrics (Shannon Entropy, Bounded JS-Divergence) that provide clear, inspectable behavioral indicators.
 
 ---
 
@@ -22,7 +22,7 @@ The architecture is divided into five logical tiers operating sequentially:
 graph TD
     subgraph Tier1["TIER 1: Sensing & Ingestion"]
         GPS[Raw GPS Stream / GeoLife PLT Parser]
-        FLT[Noise Filter & Outlier Removal]
+        FLT[Noise Filter & Velocity Outlier Removal]
     end
 
     subgraph Tier2["TIER 2: Spatio-Temporal Extraction"]
@@ -36,43 +36,21 @@ graph TD
     end
 
     subgraph Tier4["TIER 4: Routine Mining & Prediction"]
-        SM[Sequence Formatter & N-Gram Constructor]
-        MC[Markov Chain Transition Engine]
+        SM[Time-Conditioned Sequence Formatter]
+        MC[Time-Conditioned Markov Engine]
     end
 
     subgraph Tier5["TIER 5: Routine Stability & Drift Analysis"]
-        SE[Shannon Entropy Calculator]
-        KLD[KL-Divergence Drift Detector]
+        SE[Sequence Entropy Calculator]
+        JSD[JS-Divergence Drift Detector]
         DASH[Analytics & Dashboard]
     end
 
     GPS --> FLT --> SPE --> SPDB
     SPDB --> ST --> POI
     POI --> SM --> MC
-    MC --> SE & KLD --> DASH
+    MC --> SE & JSD --> DASH
 ```
-
-### Component Details
-
-#### Tier 1: Sensing & Data Ingestion
-- **GPS Stream Ingestion**: Captures raw tuple vectors $p_i = (\text{lat}_i, \text{lon}_i, t_i, \text{alt}_i)$.
-- **Filtering Unit**: Removes satellite multipath noise and impossible movement vectors (speeds $> 150 \text{ km/h}$ for pedestrian/urban context).
-
-#### Tier 2: Stay Point Extraction
-- **Temporal-Spatial Windowing**: Evaluates consecutive GPS points to identify stationary periods where distance traveled remains within $D_{th}$ across duration $T_{th}$.
-- **Stay Point Abstraction**: Collapses hundreds of raw GPS points into a single stay point $s = (\bar{\text{lat}}, \bar{\text{lon}}, t_{\text{start}}, t_{\text{end}}, \Delta t)$.
-
-#### Tier 3: Semantic POI Discovery
-- **ST-DBSCAN Engine**: Clusters stay points across spatial proximity $\epsilon_1$, temporal window overlap $\epsilon_2$, and density threshold $MinPts$.
-- **Semantic Mapping**: Discovered spatial clusters are assigned persistent POI identifiers ($c_1, c_2, \dots, c_k$).
-
-#### Tier 4: Routine Mining & Transition Modeling
-- **Trajectory Tokenization**: Converts time-ordered POI visits into discrete sequence tokens (e.g., $c_1 \xrightarrow{8:00} c_2 \xrightarrow{17:30} c_1$).
-- **Markov Chain Matrix**: Builds transition probability matrix $P(S_{t+1} = s_j \mid S_t = s_i)$ to estimate the user's next probable place.
-
-#### Tier 5: Routine Stability & Drift Analytics
-- **Shannon Entropy ($H_X$)**: Quantifies variability in daily location transitions. Low entropy signifies structured routine; high entropy signifies unpredictable mobility.
-- **Kullback-Leibler Divergence ($D_{KL}$)**: Compares historical baseline transition distributions ($P$) against current weekly transition distributions ($Q$) to flag behavioral shifts.
 
 ---
 
@@ -83,20 +61,20 @@ The Android prototype implements clean architecture principles using Kotlin, Jet
 ```mermaid
 graph LR
     subgraph UI["UI & Presentation Layer"]
-        MVVM[Viewmodel / Jetpack Compose / Dashboard]
+        MVVM[ViewModel / Jetpack Compose / Dashboard]
     end
 
     subgraph DOMAIN["Domain & Business Logic Layer"]
         SPE_M[StayPointExtractor]
         STD_M[STDBSCANClusterer]
-        MC_M[MarkovRoutineEngine]
+        MC_M[TimeConditionedMarkovEngine]
         DRIFT_M[RoutineDriftAnalyzer]
     end
 
     subgraph DATA["Data & Persistence Layer"]
-        ROOM[(Room SQLite Database)]
+        ROOM[(Room SQLite Database + SQLCipher)]
         REPLAY[TrajectoryReplayManager]
-        FUSED[FusedLocationProviderClient]
+        FUSED[FusedLocationProviderClient + ActivityRecognition]
     end
 
     MVVM --> DOMAIN
@@ -107,13 +85,13 @@ graph LR
 
 ### Key Android Components
 
-1. **Adaptive Sensing Service**:
-   - Uses `FusedLocationProviderClient` with dynamic polling rates.
-   - Adjusts GPS sampling interval dynamically: 10s during active movement, 5 minutes when stationary.
+1. **Context-Aware Sensing Service**:
+   - Leverages `ActivityRecognitionClient` to detect user motion state.
+   - When motion state is `STILL`, location tracking pauses until `IN_MOTION` transition or geofence exit occurs, drastically reducing battery draw.
 2. **Trajectory Replay Engine**:
    - Reads offline GeoLife `PLT` files or simulated GPS tracks to emulate real-world sensor streams for repeatable testing and demonstrations.
 3. **WorkManager Scheduler**:
-   - Executes compute-intensive tasks (ST-DBSCAN clustering and Markov matrix updating) during idle device states or overnight charging windows.
+   - Executes compute-intensive tasks (ST-DBSCAN clustering and Markov matrix updating) during idle device states or overnight charging windows (`RequiresCharging = true`).
 4. **Room Database Schema**:
 
 ```mermaid
@@ -125,38 +103,49 @@ erDiagram
         long timestamp
         float accuracy
     }
+    SEMANTIC_POI {
+        long id PK
+        int cluster_id UK
+        double centroid_lat
+        double centroid_lon
+        string label
+    }
     STAY_POINT {
         long id PK
+        long semantic_poi_id FK
         double mean_latitude
         double mean_longitude
         long start_time
         long end_time
         long duration_seconds
     }
-    SEMANTIC_POI {
-        long id PK
-        int cluster_id
-        double centroid_lat
-        double centroid_lon
-        string label
-    }
     ROUTINE_TRANSITION {
         long id PK
         int source_poi_id FK
         int target_poi_id FK
-        int hour_of_day
+        int time_slot
         int day_of_week
         int transition_count
     }
 
     RAW_GPS ||--o{ STAY_POINT : aggregates
-    STAY_POINT ||--o{ SEMANTIC_POI : clusters_into
+    SEMANTIC_POI ||--o{ STAY_POINT : groups
     SEMANTIC_POI ||--o{ ROUTINE_TRANSITION : transition_from
 ```
 
 ---
 
-## 4. Phase 1 vs Phase 2 Data Interchange
+## 4. Cold-Start Strategy & Mitigation
+
+To handle new application installations before sufficient user routines are observed:
+
+1. **Warmup Phase (Days 1–7)**: The system operates in passive sensing mode. Stay points and preliminary clusters are accumulated without exposing low-confidence predictions to the user interface.
+2. **Time-of-Day Spatial Priors**: When sequence data is sparse, the predictor falls back to a time-of-day stationary prior ($P(s_j \mid \tau)$) rather than requiring full $s_i \to s_j$ transition history.
+3. **Confidence Scoring Threshold**: Next-location predictions are only surfaced in the UI when the transition state probability exceeds confidence threshold $\theta_{\text{conf}} \ge 0.40$.
+
+---
+
+## 5. Phase 1 vs Phase 2 Data Interchange
 
 To ensure seamless transitions between Python engine research (Phase 1) and Kotlin Android development (Phase 2), standardized JSON schema artifacts are used:
 
@@ -166,8 +155,8 @@ To ensure seamless transitions between Python engine research (Phase 1) and Kotl
 
 ---
 
-## 5. Security & Privacy Guardrails
+## 6. Security & Privacy Guardrails
 
-- **Local Storage Encryption**: SQLite Room database encrypted using SQLCipher.
+- **Local Storage Encryption**: SQLite Room database encrypted using SQLCipher (`SupportFactory` initialized with KeyStore managed keys).
 - **On-Device Execution**: No network socket transmission of raw GPS coordinates.
 - **Zero Third-Party Analytics**: Analytics remain localized within the client device environment.
