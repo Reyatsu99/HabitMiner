@@ -110,6 +110,9 @@ def extract_stay_points(trajectory, D_th=200, T_th=1200):
 
 ## 2. Spatio-Temporal Clustering (ST-DBSCAN)
 
+> [!NOTE]
+> While the mathematical formulation for spatio-temporal clustering is provided below for completeness, the actual Python implementation will rely on established data science libraries (e.g., `scikit-mobility` or `scikit-learn`'s DBSCAN adapted with a custom distance metric) to avoid reinventing fundamental infrastructure.
+
 Stay points are unlabelled geographical centroids. **ST-DBSCAN** clusters stay points into semantic Points of Interest (POIs) considering spatial radius $\epsilon_1$, time-of-day temporal window constraint $\epsilon_2$, and minimum neighborhood density $MinPts$.
 
 ### 2.1 Time-of-Day Cyclic Distance
