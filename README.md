@@ -70,26 +70,23 @@ To maintain a manageable, research-oriented scope suitable for a semester timefr
 
 ---
 
-## 4. Implementation Roadmap
+## 4. Implementation Status (Phase 1 Complete)
 
-```
-HabitMiner Development Roadmap
-│
-├── 🔹 Phase 1: Python Research Engine (The Core)
-│   ├── GeoLife Dataset Ingestion & Stay Point Extraction
-│   ├── ST-DBSCAN Integration (via libraries)
-│   ├── Custom Time-Conditioned Markov Predictor
-│   └── Sequence Entropy & JS-Divergence Analytical Pipeline
-│
-├── 🔹 Phase 2: Android Data Logger (The Tool)
-│   ├── Activity Recognition & Context-Aware Location Collector
-│   ├── Room Database Schema for raw trajectories
-│   └── Export & Trajectory Replay Mechanism
-│
-└── 🔹 Phase 3: Evaluation & Visualization
-    ├── Interactive Map Visualization (Folium)
-    └── Next-Location Accuracy (Top-1/Top-3, MRR) Benchmarking
-```
+We have successfully completed a full **Vertical Slice** implementation of Phase 1, encompassing both the Python Research Engine and the core Android Data Logger:
+
+### ✅ Python Intelligence Engine (`engine/`)
+- **Data Ingestion**: `parser.py` safely loads and cleans GeoLife datasets.
+- **Spatio-Temporal Abstraction**: 
+  - `stay_point.py`: Haversine-based Stay Point Extraction.
+  - `stdbscan.py`: Semantic POI Clustering using custom cyclic temporal distances.
+- **Pattern Discovery**: `markov_model.py` implements a Time-Conditioned First-Order Markov chain.
+- **Analytics & Visualization**: `routine_analytics.py` (Sequence Entropy & JS-Divergence) and `visualize.py` (Folium map generation) tied together via `main.py`.
+
+### ✅ Android Data Logger (`android/`)
+- **Local Persistence**: Integrated Room Database (`AppDatabase`, `RawGpsEntity`, `LocationDao`).
+- **Background Tracking**: Developed `LocationTrackingService` via `FusedLocationProviderClient`.
+- **Data Replay & Export**: Implemented `TrajectoryReplayManager` for offline testing and `ExportWorker` (WorkManager) for JSON extraction.
+- **Basic UI**: Scaffolded a Jetpack Compose `MainActivity` shell.
 
 ---
 
