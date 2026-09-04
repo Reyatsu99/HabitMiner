@@ -53,7 +53,7 @@ class LocationTrackingService : Service() {
             }
         }
         
-        createNotificationChannel()
+        setupNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -66,7 +66,7 @@ class LocationTrackingService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun startTracking() {
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, LocationTrackingService.CHANNEL_ID)
             .setContentTitle("HabitMiner is active")
             .setContentText("Collecting contextual location data...")
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -91,6 +91,18 @@ class LocationTrackingService : Service() {
         fusedLocationClient.removeLocationUpdates(locationCallback)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun setupNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                LocationTrackingService.CHANNEL_ID,
+                "Location Tracking Service",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
     }
     
     private fun saveLocationToDb(location: android.location.Location) {
