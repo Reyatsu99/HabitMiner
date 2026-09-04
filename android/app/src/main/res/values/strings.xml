@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">HabitMiner</string>
+    <string name="tracking_active">Tracking Active</string>
+    <string name="tracking_inactive">Tracking Inactive</string>
+    <string name="btn_start_tracking">Start Tracking</string>
+    <string name="btn_stop_tracking">Stop Tracking</string>
+    <string name="btn_export">Export Data</string>
+    <string name="label_points_collected">Points Collected</string>
+    <string name="label_last_export">Last Export</string>
+    <string name="notification_tracking_title">HabitMiner is active</string>
+    <string name="notification_tracking_text">Collecting contextual location data…</string>
+    <string name="export_success">Data exported successfully</string>
+    <string name="export_empty">No data to export yet</string>
+    <string name="permission_rationale_location">HabitMiner needs location access to discover your daily routines. All data stays on-device.</string>
+    <string name="permission_rationale_activity">HabitMiner uses activity recognition to pause GPS when you\'re stationary, saving battery.</string>
+</resources>

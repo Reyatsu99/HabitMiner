@@ -1,0 +1,6 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme -->
+    <style name="Theme.HabitMiner" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Compose takes over the full window; no XML theming needed beyond this -->
+    </style>
+</resources>

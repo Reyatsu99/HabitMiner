@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.habitminer">
+
+    <!-- ==================== Permissions ==================== -->
+
+    <!-- Location (Fine + Coarse for GPS accuracy) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Background location — required for tracking while app is not in foreground -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- Activity Recognition — required to detect STILL/WALKING/IN_VEHICLE states -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- Foreground Service — required to keep LocationTrackingService alive -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- Internet — not used for cloud, but needed for map tiles in debug builds -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Receive boot completed to reschedule WorkManager after device restart -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:name=".HabitMinerApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.HabitMiner">
+
+        <!-- ==================== Activities ==================== -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ==================== Services ==================== -->
+        <!--
+            LocationTrackingService runs as a foreground service.
+            foregroundServiceType="location" is required on Android 10+
+            for accessing location while in the background.
+        -->
+        <service
+            android:name=".service.LocationTrackingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <!-- ==================== WorkManager Providers ==================== -->
+        <!--
+            WorkManager initialises itself automatically via its own ContentProvider.
+            If using on-demand initialisation, disable it here and override in HabitMinerApp.
+        -->
+
+    </application>
+
+</manifest>
