@@ -64,4 +64,30 @@ class TrajectoryReplayManager(private val context: Context) {
             }
         }
     }
+
+    fun injectSyntheticDemoData(pointCount: Int = 50) {
+        scope.launch {
+            val baseTime = System.currentTimeMillis() / 1000
+            val baseLat = 39.9000
+            val baseLon = 116.3000
+            
+            val entities = mutableListOf<RawGpsEntity>()
+            for (i in 0 until pointCount) {
+                val latJitter = (Math.random() - 0.5) * 0.005
+                val lonJitter = (Math.random() - 0.5) * 0.005
+                entities.add(
+                    RawGpsEntity(
+                        latitude = baseLat + latJitter,
+                        longitude = baseLon + lonJitter,
+                        timestamp = baseTime + (i * 60),
+                        accuracy = 4.5f,
+                        activityState = if (i % 2 == 0) "STILL" else "IN_MOTION"
+                    )
+                )
+            }
+            db.locationDao().insertLocations(entities)
+            Log.d("HabitMiner", "Injected $pointCount synthetic demo points into Room DB.")
+        }
+    }
 }
+

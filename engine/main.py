@@ -8,69 +8,40 @@ from markov_model import TimeConditionedMarkovModel
 from routine_analytics import sequence_entropy, normalized_sequence_entropy
 import visualize
 
-def run_pipeline(data_path: str):
+def run_pipeline(data_path: str = None):
     """
-    Runs the full Phase 1 processing pipeline on a GeoLife user directory.
+    Runs the full Phase 1 processing pipeline on a GeoLife user directory or synthetic benchmark dataset.
     """
     print(f"--- HabitMiner Engine Pipeline ---")
     
-    if not os.path.exists(data_path):
-        print(f"[!] Data path not found: {data_path}. Please download GeoLife dataset or provide synthetic data.")
-        return
-        
-    print(f"[1] Loading Trajectory Data from {data_path}...")
-    df = load_user_trajectory(data_path)
-    if df.empty:
-        print("[!] No valid trajectory data found.")
-        return
+    if data_path and os.path.exists(data_path):
+        print(f"[1] Loading Trajectory Data from {data_path}...")
+        df = load_user_trajectory(data_path)
+    else:
+        print("[1] Data path not provided or not found. Generating 7-day benchmark synthetic trajectory...")
+        from parser import generate_synthetic_trajectory
+        df = generate_synthetic_trajectory(num_days=7)
         
     print(f"    Loaded {len(df)} valid GPS points.")
     
-    print("[2] Extracting Stay Points (D_th=200m, T_th=1200s)...")
-    stay_points_df = extract_stay_points(df, D_th=200, T_th=1200)
-    print(f"    Extracted {len(stay_points_df)} stay points.")
+    print("[2] Running System Evaluation & Accuracy Metrics...")
+    from evaluate import evaluate_pipeline
+    metrics = evaluate_pipeline(df)
     
-    if stay_points_df.empty:
-        return
-        
-    print("[3] Clustering into Semantic POIs (ST-DBSCAN)...")
-    clustered_sp = stdbscan_cluster(stay_points_df, eps1=300, eps2=3600, min_pts=3)
+    print("[3] Extracting Stay Points & POI Clusters...")
+    stay_points_df = extract_stay_points(df, D_th=200, T_th=900)
+    clustered_sp = stdbscan_cluster(stay_points_df, eps1=500, eps2=86400, min_pts=2)
     pois_df = aggregate_pois(clustered_sp)
-    num_pois = len(pois_df)
-    print(f"    Discovered {num_pois} unique Semantic POIs.")
     
-    print("[4] Training Time-Conditioned Markov Model...")
-    # Prepare sequence for Markov Model
-    sequence = []
-    for _, row in clustered_sp.iterrows():
-        sequence.append((int(row['cluster_id']), int(row['start_time'])))
-        
-    model = TimeConditionedMarkovModel(num_clusters=num_pois, alpha=0.1)
-    model.fit(sequence)
-    print("    Model trained successfully.")
+    print(f"    Mined {metrics.get('total_stay_points', len(stay_points_df))} stay points into {len(pois_df)} POI clusters.")
+    print(f"    Top-1 Accuracy: {metrics.get('top1_accuracy')}% | Top-3 Accuracy: {metrics.get('top3_accuracy')}%")
+    print(f"    Routine Entropy: {metrics.get('shannon_entropy')} bits")
     
-    print("[5] Routine Analytics...")
-    if num_pois > 0:
-        visit_counts = pois_df['point_count'].values
-        h_seq = sequence_entropy(visit_counts)
-        h_norm = normalized_sequence_entropy(visit_counts, num_pois)
-        print(f"    Sequence Entropy (H_seq): {h_seq:.3f}")
-        print(f"    Normalized Entropy (H_norm): {h_norm:.3f}")
-        if h_norm < 0.5:
-            print("    -> Routine is highly predictable.")
-        else:
-            print("    -> Routine is highly variable/irregular.")
-            
-    print("[6] Visualizing Results...")
-    map_obj = visualize.plot_trajectory(df.sample(min(1000, len(df))) if len(df) > 1000 else df) # Downsample for plotting
-    map_obj = visualize.plot_pois(pois_df, map_obj)
-    
-    output_map = "habitminer_map.html"
-    map_obj.save(output_map)
-    print(f"    Map saved to {output_map}")
+    print("[4] Generating Presentation HTML Report...")
+    output_html = visualize.create_presentation_report(df, pois_df, metrics, output_file="habitminer_report.html")
+    print(f"    Report saved to file://{os.path.abspath(output_html)}")
     print("Pipeline Complete.")
 
 if __name__ == "__main__":
-    # Example usage: Replace with actual path to GeoLife user folder, e.g., 'data/geolife/Data/000/'
-    sample_path = "../data/geolife/Data/000/" 
-    run_pipeline(sample_path)
+    run_pipeline()
+

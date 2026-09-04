@@ -126,6 +126,95 @@ def load_user_trajectory(user_folder_path: str) -> pd.DataFrame:
         
     return full_df
 
+def generate_synthetic_trajectory(num_days: int = 7) -> pd.DataFrame:
+    """
+    Generates a realistic synthetic multi-day trajectory (Home, Work, Gym, Cafe).
+    Useful for local benchmarking and system evaluations.
+    """
+    records = []
+    base_time = int(datetime(2026, 1, 1, 8, 0, 0).timestamp())
+    
+    # 4 Anchors: Home, Work, Gym, Cafe
+    home_lat, home_lon = 39.9000, 116.3000
+    work_lat, work_lon = 39.9500, 116.3500
+    gym_lat, gym_lon   = 39.9100, 116.3200
+    cafe_lat, cafe_lon = 39.9200, 116.3100
+    
+    current_time = base_time
+    
+    for day in range(num_days):
+        # 1. Stay Home (8:00 AM to 9:00 AM)
+        for minute in range(60):
+            records.append({
+                "lat": home_lat + (np.random.rand() - 0.5) * 0.0001,
+                "lon": home_lon + (np.random.rand() - 0.5) * 0.0001,
+                "datetime": pd.to_datetime(current_time, unit='s'),
+                "timestamp": current_time
+            })
+            current_time += 60
+            
+        # Transit Home -> Work (9:00 AM to 9:30 AM)
+        for minute in range(30):
+            alpha = minute / 30.0
+            records.append({
+                "lat": (1 - alpha) * home_lat + alpha * work_lat,
+                "lon": (1 - alpha) * home_lon + alpha * work_lon,
+                "datetime": pd.to_datetime(current_time, unit='s'),
+                "timestamp": current_time
+            })
+            current_time += 60
+            
+        # 2. Stay at Work (9:30 AM to 5:00 PM)
+        for minute in range(450):
+            records.append({
+                "lat": work_lat + (np.random.rand() - 0.5) * 0.0001,
+                "lon": work_lon + (np.random.rand() - 0.5) * 0.0001,
+                "datetime": pd.to_datetime(current_time, unit='s'),
+                "timestamp": current_time
+            })
+            current_time += 60
+            
+        # Transit Work -> Gym / Cafe (5:00 PM to 5:30 PM)
+        target_lat, target_lon = (gym_lat, gym_lon) if day % 2 == 0 else (cafe_lat, cafe_lon)
+        for minute in range(30):
+            alpha = minute / 30.0
+            records.append({
+                "lat": (1 - alpha) * work_lat + alpha * target_lat,
+                "lon": (1 - alpha) * work_lon + alpha * target_lon,
+                "datetime": pd.to_datetime(current_time, unit='s'),
+                "timestamp": current_time
+            })
+            current_time += 60
+            
+        # 3. Stay at Gym / Cafe (5:30 PM to 7:00 PM)
+        for minute in range(90):
+            records.append({
+                "lat": target_lat + (np.random.rand() - 0.5) * 0.0001,
+                "lon": target_lon + (np.random.rand() - 0.5) * 0.0001,
+                "datetime": pd.to_datetime(current_time, unit='s'),
+                "timestamp": current_time
+            })
+            current_time += 60
+            
+        # Transit -> Home (7:00 PM to 7:30 PM)
+        for minute in range(30):
+            alpha = minute / 30.0
+            records.append({
+                "lat": (1 - alpha) * target_lat + alpha * home_lat,
+                "lon": (1 - alpha) * target_lon + alpha * home_lon,
+                "datetime": pd.to_datetime(current_time, unit='s'),
+                "timestamp": current_time
+            })
+            current_time += 60
+            
+        # Jump to next day 8:00 AM
+        current_time += 12.5 * 3600
+
+    df = pd.DataFrame(records)
+    df["altitude"] = np.nan
+    return df
+
 if __name__ == "__main__":
     # Quick test logic
     print("GeoLife parser ready. Run with actual data path to test.")
+

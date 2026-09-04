@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
@@ -25,7 +26,7 @@ class LocationTrackingService : Service() {
     private lateinit var locationCallback: LocationCallback
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
-    // For battery optimization, we track if user is STILL (simplified for this phase)
+    // For battery optimization, we track if user is STILL
     private var isUserStill = false
 
     companion object {
@@ -42,7 +43,6 @@ class LocationTrackingService : Service() {
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 if (isUserStill) {
-                    // Skip recording if we know the user hasn't moved
                     return
                 }
                 
@@ -66,29 +66,55 @@ class LocationTrackingService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun startTracking() {
-        val notification = NotificationCompat.Builder(this, LocationTrackingService.CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("HabitMiner is active")
             .setContentText("Collecting contextual location data...")
+            .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
             .build()
             
-        startForeground(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
         
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000L)
-            .setMinUpdateIntervalMillis(2000L)
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 3000L)
+            .setMinUpdateIntervalMillis(1000L)
+            .setMinUpdateDistanceMeters(0f)
+            .setWaitForAccurateLocation(false)
             .build()
 
-        fusedLocationClient.requestLocationUpdates(
-            locationRequest,
-            locationCallback,
-            Looper.getMainLooper()
-        )
-        
-        // TODO: Register ActivityRecognitionClient to update isUserStill flag
+        try {
+            // Attempt to get last known location immediately
+            fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
+                if (lastLoc != null) {
+                    Log.d("HabitMiner", "Initial Last Known Location: ${lastLoc.latitude}, ${lastLoc.longitude}")
+                    saveLocationToDb(lastLoc)
+                }
+            }
+
+            fusedLocationClient.requestLocationUpdates(
+                locationRequest,
+                locationCallback,
+                Looper.getMainLooper()
+            )
+        } catch (e: Exception) {
+            Log.e("HabitMiner", "Error requesting location updates: ${e.message}", e)
+        }
     }
 
     private fun stopTracking() {
-        fusedLocationClient.removeLocationUpdates(locationCallback)
+        try {
+            fusedLocationClient.removeLocationUpdates(locationCallback)
+        } catch (e: Exception) {
+            Log.e("HabitMiner", "Error removing location updates: ${e.message}")
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -96,7 +122,7 @@ class LocationTrackingService : Service() {
     private fun setupNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                LocationTrackingService.CHANNEL_ID,
+                CHANNEL_ID,
                 "Location Tracking Service",
                 NotificationManager.IMPORTANCE_LOW
             )
@@ -120,6 +146,6 @@ class LocationTrackingService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? {
-        return null // Not bound service
+        return null
     }
 }

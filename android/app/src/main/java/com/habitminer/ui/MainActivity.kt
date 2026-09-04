@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -22,8 +23,10 @@ import androidx.core.content.ContextCompat
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.habitminer.data.AppDatabase
+import com.habitminer.data.RawGpsEntity
 import com.habitminer.service.LocationTrackingService
 import com.habitminer.worker.ExportWorker
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,31 +40,35 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HabitMinerApp() {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var isTracking by remember { mutableStateOf(false) }
     
     // Live DB count from Room
     val db = remember { AppDatabase.getDatabase(context) }
     val pointCount by db.locationDao().getLocationCountFlow().collectAsState(initial = 0)
 
-    // Permission launcher
-    val permissionsToRequest = mutableListOf(
-        Manifest.permission.ACCESS_FINE_LOCATION,
-        Manifest.permission.ACCESS_COARSE_LOCATION
-    ).apply {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }.toTypedArray()
-
-    val permissionLauncher = rememberLauncherForActivityResult(
+    // Location permissions launcher (Requests Fine + Coarse)
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val granted = permissions.entries.all { it.value }
-        if (granted) {
-            toggleTrackingService(context, true)
-            isTracking = true
+    ) { _ ->
+        if (hasLocationPermission(context)) {
+            checkGpsAndStart(context) {
+                isTracking = true
+            }
         } else {
-            Toast.makeText(context, "Location permissions required for tracking", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Location permission is required to track GPS points", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // Notification permission launcher (Android 13+)
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        // Notification permission granted or denied - proceed with location tracking regardless
+        if (hasLocationPermission(context)) {
+            checkGpsAndStart(context) {
+                isTracking = true
+            }
         }
     }
 
@@ -112,22 +119,41 @@ fun HabitMinerApp() {
                             toggleTrackingService(context, false)
                             isTracking = false
                         } else {
-                            val hasPermissions = permissionsToRequest.all {
-                                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
-                            }
-                            if (hasPermissions) {
-                                toggleTrackingService(context, true)
-                                isTracking = true
+                            if (!hasLocationPermission(context)) {
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission(context)) {
+                                // Request notification permission for foreground service, but don't block tracking
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             } else {
-                                permissionLauncher.launch(permissionsToRequest)
+                                checkGpsAndStart(context) {
+                                    isTracking = true
+                                }
                             }
                         }
                     }
                 ) {
                     Text(if (isTracking) "Stop Tracking" else "Start Tracking")
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        val replayManager = com.habitminer.data.TrajectoryReplayManager(context)
+                        replayManager.injectSyntheticDemoData(50)
+                        Toast.makeText(context, "Injected 50 demo GPS points into database!", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Load Demo Trajectory (+50 Points)")
+                }
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 
                 OutlinedButton(
                     modifier = Modifier.fillMaxWidth(),
@@ -141,6 +167,34 @@ fun HabitMinerApp() {
                 }
             }
         }
+    }
+}
+
+private fun hasLocationPermission(context: Context): Boolean {
+    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    return fine || coarse
+}
+
+private fun hasNotificationPermission(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true
+    }
+}
+
+private fun checkGpsAndStart(context: Context, onStarted: () -> Unit) {
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                       locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+
+    if (!isGpsEnabled) {
+        Toast.makeText(context, "Please turn ON Location / GPS in your phone settings!", Toast.LENGTH_LONG).show()
+    } else {
+        toggleTrackingService(context, true)
+        Toast.makeText(context, "Location tracking started!", Toast.LENGTH_SHORT).show()
+        onStarted()
     }
 }
 
@@ -158,4 +212,3 @@ private fun toggleTrackingService(context: Context, start: Boolean) {
         context.stopService(intent)
     }
 }
-
