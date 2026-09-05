@@ -2,69 +2,110 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>HabitMiner Map</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="leaflet.css" />
+  <script src="leaflet.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #0f172a; }
-    #map { height: 100vh; width: 100vw; }
+    html, body { height: 100%; width: 100%; background: #0f172a; overflow: hidden; }
+    #map { height: 100%; width: 100%; background: #0f172a; }
+    .leaflet-container { background: #0f172a !important; }
     .legend {
       background: rgba(15,23,42,0.92);
       color: #f8fafc;
       padding: 10px 14px;
       border-radius: 10px;
-      font-family: 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 12px;
       border: 1px solid #334155;
     }
-    .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <script>
-    var map = L.map('map', {
-      center: [39.9, 116.3],
-      zoom: 13,
-      zoomControl: true
-    });
+    var map;
+    try {
+      map = L.map('map', {
+        center: [39.9, 116.3],
+        zoom: 13,
+        zoomControl: true
+      });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap, CartoDB',
-      maxZoom: 19
-    }).addTo(map);
+      // Primary CartoDB Dark tiles
+      var darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap, CartoDB',
+        maxZoom: 19,
+        subdomains: 'abcd'
+      });
 
-    var trajectoryLayer = L.layerGroup().addTo(map);
-    var stayPointLayer  = L.layerGroup().addTo(map);
+      // Fallback OpenStreetMap tiles if CartoDB fails
+      var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+      });
+
+      darkLayer.addTo(map);
+
+      // Fallback mechanism if dark tiles fail to load
+      darkLayer.on('tileerror', function() {
+        if (!map.hasLayer(osmLayer)) {
+          map.removeLayer(darkLayer);
+          osmLayer.addTo(map);
+        }
+      });
+    } catch (err) {
+      console.error("Map initialization failed:", err);
+    }
+
+    var trajectoryLayer = map ? L.layerGroup().addTo(map) : null;
+    var stayPointLayer  = map ? L.layerGroup().addTo(map) : null;
 
     var clusterColors = ['#38bdf8','#4ade80','#f59e0b','#c084fc','#f87171','#67e8f9'];
 
     // Called by Android WebView bridge
-    function loadPoints(jsonStr) {
+    function loadPoints(dataInput) {
+      if (!map || !trajectoryLayer || !stayPointLayer) return;
+
       trajectoryLayer.clearLayers();
       stayPointLayer.clearLayers();
 
-      var data = JSON.parse(jsonStr);
+      var data = dataInput;
+      if (typeof dataInput === 'string') {
+        try {
+          data = JSON.parse(dataInput);
+        } catch (e) {
+          console.error("Failed to parse JSON string in loadPoints:", e);
+          return;
+        }
+      }
+
+      if (!data) return;
+
       var gpsPoints = data.gps || [];
       var stayPoints = data.stay || [];
 
-      if (gpsPoints.length === 0) return;
+      var allLatLngs = [];
 
       // Draw trajectory line
-      var latlngs = gpsPoints.map(function(p) { return [p.lat, p.lon]; });
-      L.polyline(latlngs, { color: '#38bdf8', weight: 2.5, opacity: 0.7 }).addTo(trajectoryLayer);
+      if (gpsPoints.length > 0) {
+        var latlngs = gpsPoints.map(function(p) { return [p.lat, p.lon]; });
+        allLatLngs = allLatLngs.concat(latlngs);
 
-      // Draw GPS dots (every 10th to avoid clutter)
-      gpsPoints.filter(function(_, i) { return i % 10 === 0; }).forEach(function(p) {
-        L.circleMarker([p.lat, p.lon], {
-          radius: 2.5, color: '#38bdf8', fillColor: '#38bdf8', fillOpacity: 0.5, weight: 0
-        }).addTo(trajectoryLayer);
-      });
+        L.polyline(latlngs, { color: '#38bdf8', weight: 2.5, opacity: 0.7 }).addTo(trajectoryLayer);
+
+        // Draw GPS dots (every 10th to avoid clutter)
+        gpsPoints.filter(function(_, i) { return i % 10 === 0; }).forEach(function(p) {
+          L.circleMarker([p.lat, p.lon], {
+            radius: 2.5, color: '#38bdf8', fillColor: '#38bdf8', fillOpacity: 0.5, weight: 0
+          }).addTo(trajectoryLayer);
+        });
+      }
 
       // Draw stay point markers
       stayPoints.forEach(function(sp) {
+        allLatLngs.push([sp.lat, sp.lon]);
         var color = clusterColors[sp.cluster % clusterColors.length] || '#ffffff';
         L.circleMarker([sp.lat, sp.lon], {
           radius: 14,
@@ -77,17 +118,18 @@
         .addTo(stayPointLayer);
       });
 
-      // Fit map to trajectory
-      map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
+      // Fit map to trajectory / stay points
+      if (allLatLngs.length > 0) {
+        map.fitBounds(L.latLngBounds(allLatLngs), { padding: [30, 30], maxZoom: 16 });
+      }
     }
 
-    // Default placeholder until Android loads data
+    // Default placeholder marker if no points after 500ms
     setTimeout(function() {
-      if (trajectoryLayer.getLayers().length === 0) {
+      if (map && trajectoryLayer && trajectoryLayer.getLayers().length === 0 && stayPointLayer.getLayers().length === 0) {
         L.marker([39.9, 116.3])
-          .bindPopup('<b>HabitMiner</b><br>Start tracking to see your trajectory here!')
-          .addTo(trajectoryLayer)
-          .openPopup();
+          .bindPopup('<b>HabitMiner</b><br>Start tracking or load demo data to see your trajectory!')
+          .addTo(trajectoryLayer);
       }
     }, 500);
   </script>

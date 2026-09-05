@@ -18,7 +18,8 @@ import org.json.JSONObject
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun MapScreen(state: HabitUiState) {
-    var webView by remember { mutableStateOf<WebView?>(null) }
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var isPageLoaded by remember { mutableStateOf(false) }
 
     // Build JSON payload whenever state changes
     val mapJson = remember(state.allPoints, state.stayPoints, state.poiSummaries) {
@@ -50,26 +51,43 @@ fun MapScreen(state: HabitUiState) {
         }.toString()
     }
 
+    // Push data into JS once page finishes loading or when mapJson changes
+    LaunchedEffect(mapJson, isPageLoaded) {
+        if (isPageLoaded) {
+            webViewRef?.evaluateJavascript("loadPoints($mapJson)", null)
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
-                    webViewClient = WebViewClient()
+                    settings.allowFileAccess = true
+                    settings.allowContentAccess = true
+                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+                    webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                            isPageLoaded = true
+                            view?.evaluateJavascript("loadPoints($mapJson)", null)
+                        }
+                    }
                     loadUrl("file:///android_asset/map.html")
-                    webView = this
+                    webViewRef = this
                 }
             },
             update = { wv ->
-                // Push data into JS after page loads
-                val escaped = mapJson.replace("\\", "\\\\").replace("'", "\\'")
-                wv.evaluateJavascript("loadPoints('$escaped')", null)
+                if (isPageLoaded) {
+                    wv.evaluateJavascript("loadPoints($mapJson)", null)
+                }
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        if (state.allPoints.isEmpty()) {
+        if (state.allPoints.isEmpty() && state.stayPoints.isEmpty()) {
             Card(
                 modifier = Modifier
                     .align(Alignment.Center)
