@@ -51,10 +51,20 @@ fun MapScreen(state: HabitUiState) {
         }.toString()
     }
 
+    // Helper to safely evaluate JS on the WebView thread after guarding JS function existence
+    fun safeEvaluateJs(wv: WebView?, jsonPayload: String) {
+        wv?.post {
+            wv.evaluateJavascript(
+                "if (typeof loadPoints === 'function') loadPoints($jsonPayload);",
+                null
+            )
+        }
+    }
+
     // Push data into JS once page finishes loading or when mapJson changes
     LaunchedEffect(mapJson, isPageLoaded) {
         if (isPageLoaded) {
-            webViewRef?.evaluateJavascript("loadPoints($mapJson)", null)
+            safeEvaluateJs(webViewRef, mapJson)
         }
     }
 
@@ -72,7 +82,7 @@ fun MapScreen(state: HabitUiState) {
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             isPageLoaded = true
-                            view?.evaluateJavascript("loadPoints($mapJson)", null)
+                            safeEvaluateJs(view, mapJson)
                         }
                     }
                     loadUrl("file:///android_asset/map.html")
@@ -81,7 +91,7 @@ fun MapScreen(state: HabitUiState) {
             },
             update = { wv ->
                 if (isPageLoaded) {
-                    wv.evaluateJavascript("loadPoints($mapJson)", null)
+                    safeEvaluateJs(wv, mapJson)
                 }
             },
             modifier = Modifier.fillMaxSize()

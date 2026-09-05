@@ -23,6 +23,7 @@
     <!-- Foreground Service — required to keep LocationTrackingService alive -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Internet — not used for cloud, but needed for map tiles in debug builds -->
     <uses-permission android:name="android.permission.INTERNET" />

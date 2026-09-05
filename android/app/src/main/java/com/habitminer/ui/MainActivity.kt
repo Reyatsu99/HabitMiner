@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -36,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.habitminer.data.TrajectoryReplayManager
 import com.habitminer.data.GeoLifeDataLoader
@@ -63,13 +63,21 @@ fun HabitMinerApp(vm: HabitViewModel = viewModel()) {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Home) }
     val context = LocalContext.current
 
+    var permissionDeniedState by remember { mutableStateOf(!hasRequiredPermissions(context)) }
+
     val locationPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
-        if (perms.values.any { it }) {
-            startTracking(context); vm.setTracking(true)
+        val granted = perms.entries.any { (perm, isGranted) ->
+            (perm == Manifest.permission.ACCESS_FINE_LOCATION || perm == Manifest.permission.ACCESS_COARSE_LOCATION) && isGranted
+        }
+        if (granted) {
+            permissionDeniedState = false
+            startTracking(context)
+            vm.setTracking(true)
         } else {
-            Toast.makeText(context, "Location permission required", Toast.LENGTH_SHORT).show()
+            permissionDeniedState = true
+            Toast.makeText(context, "Location permission required for tracking", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -111,17 +119,23 @@ fun HabitMinerApp(vm: HabitViewModel = viewModel()) {
                 when (currentScreen) {
                     Screen.Home     -> HomeScreen(
                         state = state,
+                        permissionDenied = permissionDeniedState,
+                        onRequestPermissions = {
+                            locationPermLauncher.launch(getRequiredPermissions())
+                        },
                         onStartStop = {
                             if (state.isTracking) {
-                                stopTracking(context); vm.setTracking(false)
+                                stopTracking(context)
+                                vm.setTracking(false)
                             } else {
-                                val hasLoc = hasLocationPerm(context)
-                                if (hasLoc) { startTracking(context); vm.setTracking(true) }
-                                else locationPermLauncher.launch(
-                                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                                            Manifest.permission.RECORD_AUDIO)
-                                )
+                                if (hasRequiredPermissions(context)) {
+                                    permissionDeniedState = false
+                                    startTracking(context)
+                                    vm.setTracking(true)
+                                } else {
+                                    permissionDeniedState = true
+                                    locationPermLauncher.launch(getRequiredPermissions())
+                                }
                             }
                         },
                         onLoadGeoLife = {
@@ -139,9 +153,26 @@ fun HabitMinerApp(vm: HabitViewModel = viewModel()) {
                             Toast.makeText(context, "Loaded 50 demo GPS points!", Toast.LENGTH_SHORT).show()
                         },
                         onExport = {
-                            WorkManager.getInstance(context)
-                                .enqueue(OneTimeWorkRequestBuilder<ExportWorker>().build())
-                            Toast.makeText(context, "Export started in background", Toast.LENGTH_SHORT).show()
+                            val exportRequest = OneTimeWorkRequestBuilder<ExportWorker>().build()
+                            val workManager = WorkManager.getInstance(context)
+                            workManager.enqueue(exportRequest)
+
+                            workManager.getWorkInfoByIdLiveData(exportRequest.id).observeForever { workInfo ->
+                                if (workInfo != null) {
+                                    when (workInfo.state) {
+                                        WorkInfo.State.SUCCEEDED -> {
+                                            val count = workInfo.outputData.getInt("count", 0)
+                                            Toast.makeText(context, "Export complete! Exported $count points.", Toast.LENGTH_SHORT).show()
+                                        }
+                                        WorkInfo.State.FAILED -> {
+                                            val err = workInfo.outputData.getString("error") ?: "Export failed"
+                                            Toast.makeText(context, "Export error: $err", Toast.LENGTH_LONG).show()
+                                        }
+                                        else -> {}
+                                    }
+                                }
+                            }
+                            Toast.makeText(context, "Export task queued...", Toast.LENGTH_SHORT).show()
                         }
                     )
                     Screen.Map      -> MapScreen(state = state)
@@ -158,6 +189,8 @@ fun HabitMinerApp(vm: HabitViewModel = viewModel()) {
 @Composable
 fun HomeScreen(
     state: HabitUiState,
+    permissionDenied: Boolean,
+    onRequestPermissions: () -> Unit,
     onStartStop:   () -> Unit,
     onLoadGeoLife: () -> Unit,
     onLoadDemo:    () -> Unit,
@@ -178,6 +211,12 @@ fun HomeScreen(
                     Text("Routine Intelligence Engine", color = Color(0xFF64748B), fontSize = 13.sp)
                 }
                 TrackingPulse(isTracking = state.isTracking)
+            }
+        }
+
+        if (permissionDenied) {
+            item {
+                PermissionWarningCard(onRequestPermissions = onRequestPermissions)
             }
         }
 
@@ -217,6 +256,44 @@ fun HomeScreen(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF94A3B8)),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155))
                 ) { Text("Export JSON", fontSize = 13.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+fun PermissionWarningCard(onRequestPermissions: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF7F1D1D).copy(alpha = 0.35f)),
+        shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "⚠️ Permissions Required",
+                    color = Color(0xFFFCA5A5),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Location and audio access are required to track routine habits.",
+                    color = Color(0xFFFECACA),
+                    fontSize = 12.sp
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = onRequestPermissions,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Grant", fontSize = 12.sp, color = Color.White)
             }
         }
     }
@@ -366,9 +443,24 @@ fun StatCard(modifier: Modifier, emoji: String, label: String, value: String) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-private fun hasLocationPerm(ctx: Context) =
-    ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-    ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+private fun getRequiredPermissions(): Array<String> {
+    val list = mutableListOf(
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.RECORD_AUDIO
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        list.add(Manifest.permission.POST_NOTIFICATIONS)
+    }
+    return list.toTypedArray()
+}
+
+private fun hasRequiredPermissions(ctx: Context): Boolean {
+    val fine = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val coarse = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val audio = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    return (fine || coarse) && audio
+}
 
 private fun startTracking(ctx: Context) {
     val intent = Intent(ctx, LocationTrackingService::class.java).apply { action = LocationTrackingService.ACTION_START }

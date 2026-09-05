@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.habitminer.data.AppDatabase
 import org.json.JSONArray
 import org.json.JSONObject
@@ -19,7 +20,7 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             
             if (locations.isEmpty()) {
                 Log.d("HabitMiner", "No locations to export.")
-                return Result.success()
+                return Result.success(workDataOf("message" to "No locations to export"))
             }
             
             val jsonArray = JSONArray()
@@ -31,6 +32,9 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                     put("timestamp", loc.timestamp)
                     put("accuracy", loc.accuracy.toDouble())
                     put("activity_state", loc.activityState)
+                    put("audio_level", loc.audioLevel.toDouble())
+                    put("light_level", loc.lightLevel.toDouble())
+                    put("is_screen_on", loc.isScreenOn)
                 }
                 jsonArray.put(jsonObj)
             }
@@ -43,13 +47,10 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             
             Log.d("HabitMiner", "Exported ${locations.size} points to ${exportFile.absolutePath}")
             
-            // Once successfully exported to a file, we could clear the DB or mark them as synced.
-            // For now, we leave them in the DB.
-            
-            Result.success()
+            Result.success(workDataOf("file_path" to exportFile.absolutePath, "count" to locations.size))
         } catch (e: Exception) {
             Log.e("HabitMiner", "Export failed", e)
-            Result.failure()
+            Result.failure(workDataOf("error" to (e.localizedMessage ?: "Export failed due to I/O error")))
         }
     }
 }
