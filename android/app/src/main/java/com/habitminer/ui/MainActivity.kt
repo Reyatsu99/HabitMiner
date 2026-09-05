@@ -119,7 +119,8 @@ fun HabitMinerApp(vm: HabitViewModel = viewModel()) {
                                 if (hasLoc) { startTracking(context); vm.setTracking(true) }
                                 else locationPermLauncher.launch(
                                     arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION)
+                                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                                            Manifest.permission.RECORD_AUDIO)
                                 )
                             }
                         },

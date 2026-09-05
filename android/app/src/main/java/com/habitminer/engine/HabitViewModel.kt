@@ -15,7 +15,8 @@ data class HabitUiState(
     val poiSummaries: List<POISummary> = emptyList(),
     val prediction: Prediction? = null,
     val predictabilityScore: Int = 0,
-    val allPoints: List<RawGpsEntity> = emptyList()
+    val allPoints: List<RawGpsEntity> = emptyList(),
+    val habitEvents: List<HabitEvent> = emptyList()
 )
 
 class HabitViewModel(app: Application) : AndroidViewModel(app) {
@@ -46,6 +47,7 @@ class HabitViewModel(app: Application) : AndroidViewModel(app) {
 
         val prediction = PredictionEngine.predict(summaries, currentCluster)
         val score = PredictionEngine.predictabilityScore(summaries)
+        val habits = HabitEngine.extractHabits(points, labeled)
 
         HabitUiState(
             isTracking = tracking,
@@ -54,7 +56,8 @@ class HabitViewModel(app: Application) : AndroidViewModel(app) {
             poiSummaries = summaries,
             prediction = prediction,
             predictabilityScore = score,
-            allPoints = points
+            allPoints = points,
+            habitEvents = habits
         )
     }.stateIn(
         scope = viewModelScope,

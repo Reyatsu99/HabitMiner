@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.habitminer.engine.HabitEngine
 import com.habitminer.engine.HabitUiState
 import com.habitminer.engine.POISummary
 
@@ -65,8 +66,29 @@ fun InsightsScreen(state: HabitUiState) {
             }
         }
 
-        // Recent Stay Points
-        if (state.stayPoints.isNotEmpty()) {
+        // Behavioral Timeline
+        if (state.habitEvents.isNotEmpty()) {
+            item {
+                Text(
+                    "Behavioral Timeline",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFF94A3B8),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            items(state.habitEvents.takeLast(10).reversed()) { event ->
+                val poiLabel = if (event.clusterId >= 0) {
+                    state.poiSummaries.find { it.clusterId == event.clusterId }?.label ?: "Unknown Place"
+                } else "In Transit"
+                
+                HabitEventRow(
+                    emoji = HabitEngine.getHabitEmoji(event.habitType),
+                    title = HabitEngine.getHabitName(event.habitType),
+                    subtitle = poiLabel,
+                    durationMin = event.durationSeconds / 60
+                )
+            }
+        } else if (state.stayPoints.isNotEmpty()) {
             item {
                 Text(
                     "Recent Stay Points (${state.stayPoints.size} detected)",
@@ -193,6 +215,38 @@ fun StayPointRow(label: String, durationMin: Long, clusterId: Int) {
         Spacer(Modifier.width(12.dp))
         Text(label, color = Color(0xFFCBD5E1), fontSize = 13.sp, modifier = Modifier.weight(1f))
         Text("${durationMin}m", color = Color(0xFF64748B), fontSize = 12.sp)
+    }
+}
+
+@Composable
+fun HabitEventRow(emoji: String, title: String, subtitle: String, durationMin: Long) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF334155)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(emoji, fontSize = 18.sp)
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text(
+                    "$subtitle · ${durationMin}m",
+                    color = Color(0xFF94A3B8), fontSize = 12.sp
+                )
+            }
+        }
     }
 }
 

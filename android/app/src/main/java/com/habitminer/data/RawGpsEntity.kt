@@ -22,5 +22,14 @@ data class RawGpsEntity(
     val accuracy: Float,
     
     @ColumnInfo(name = "activity_state")
-    val activityState: String // e.g., STILL, WALKING, IN_VEHICLE
+    val activityState: String, // e.g., STILL, WALKING, IN_VEHICLE
+    
+    @ColumnInfo(name = "audio_level")
+    val audioLevel: Float = 0f,
+    
+    @ColumnInfo(name = "light_level")
+    val lightLevel: Float = 0f,
+    
+    @ColumnInfo(name = "is_screen_on")
+    val isScreenOn: Boolean = false
 )

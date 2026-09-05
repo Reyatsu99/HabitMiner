@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [RawGpsEntity::class], version = 1, exportSchema = false)
+@Database(entities = [RawGpsEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     
     abstract fun locationDao(): LocationDao
@@ -21,8 +21,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "habitminer_db"
                 )
-                // Note: SQLCipher integration for encryption can be added here in the future
-                // .openHelperFactory(SupportFactory(passphrase))
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance

@@ -10,6 +10,9 @@
     <!-- Internet — required for Leaflet.js tile loading in MapScreen WebView -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Audio — required for HabitMiner Context Engine to sample ambient noise levels -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
 
     <!-- Background location — required for tracking while app is not in foreground -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
