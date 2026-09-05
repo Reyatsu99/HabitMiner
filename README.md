@@ -22,7 +22,12 @@ The on-device **HabitEngine** aggregates this data during stationary "Stay Point
 - **Phone Usage**: (High screen-on ratio)
 - **Commuting**: (Transit between two distinct locations)
 
-These habits are visualized in a Jetpack Compose UI via the **Insights** screen, while the **Map** screen plots the trajectories on a bundled, fully offline Leaflet map.
+**Prediction & Predictability Scoring**:
+In addition to classifying habits, the app features a **PredictionEngine** that evaluates your historical trajectories using a Markov-like model. 
+- It generates a **Predictability Score** (0-100%) indicating how routine your movements are.
+- It calculates your **Next Predicted Destination** (e.g., "🔮 Next Predicted Destination: Home (85% confidence)") based on your current location cluster and time of day.
+
+These habits and predictions are visualized in a Jetpack Compose UI via the **Insights** screen and **Home** screen, while the **Map** screen plots the trajectories on a bundled, fully offline Leaflet map.
 
 ---
 
