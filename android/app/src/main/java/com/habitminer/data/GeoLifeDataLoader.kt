@@ -40,16 +40,43 @@ class GeoLifeDataLoader(private val context: Context) {
 
                 val gpsArray = json.getJSONArray("gps_records")
                 val entities = mutableListOf<RawGpsEntity>()
+                val cal = java.util.Calendar.getInstance()
 
                 for (i in 0 until gpsArray.length()) {
                     val obj = gpsArray.getJSONObject(i)
+                    val timestamp = obj.getLong("timestamp")
+                    
+                    // Simulate sensor context based on hour of day to show off the HabitEngine
+                    cal.timeInMillis = timestamp * 1000L
+                    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                    
+                    var audio = 40f
+                    var light = 200f
+                    var screen = false
+                    
+                    when (hour) {
+                        in 0..6 -> { audio = 15f; light = 2f; screen = false } // Sleeping
+                        in 9..11, in 14..16 -> { audio = 35f; light = 300f; screen = false } // Deep Focus
+                        in 19..22 -> { audio = 65f; light = 100f; screen = true } // Phone usage / Socializing
+                        else -> { audio = 50f; light = 250f; screen = Math.random() > 0.7 } // Mixed
+                    }
+                    
+                    val act = obj.getString("activityState")
+                    if (act != "STILL") {
+                        audio += 20f // louder in transit
+                        screen = false
+                    }
+
                     entities.add(
                         RawGpsEntity(
                             latitude     = obj.getDouble("latitude"),
                             longitude    = obj.getDouble("longitude"),
-                            timestamp    = obj.getLong("timestamp"),
+                            timestamp    = timestamp,
                             accuracy     = obj.getDouble("accuracy").toFloat(),
-                            activityState = obj.getString("activityState")
+                            activityState = act,
+                            audioLevel = audio,
+                            lightLevel = light,
+                            isScreenOn = screen
                         )
                     )
                 }

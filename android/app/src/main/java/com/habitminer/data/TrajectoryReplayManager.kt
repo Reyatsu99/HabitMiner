@@ -70,18 +70,43 @@ class TrajectoryReplayManager(private val context: Context) {
             val baseTime = System.currentTimeMillis() / 1000
             val baseLat = 39.9000
             val baseLon = 116.3000
+            val cal = java.util.Calendar.getInstance()
             
             val entities = mutableListOf<RawGpsEntity>()
             for (i in 0 until pointCount) {
+                val timestamp = baseTime + (i * 60)
+                cal.timeInMillis = timestamp * 1000L
+                val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                
+                var audio = 40f
+                var light = 200f
+                var screen = false
+                
+                when (hour) {
+                    in 0..6 -> { audio = 15f; light = 2f; screen = false } // Sleeping
+                    in 9..11, in 14..16 -> { audio = 35f; light = 300f; screen = false } // Deep Focus
+                    in 19..22 -> { audio = 65f; light = 100f; screen = true } // Phone usage / Socializing
+                    else -> { audio = 50f; light = 250f; screen = Math.random() > 0.7 } // Mixed
+                }
+                
+                val act = if (i % 2 == 0) "STILL" else "IN_MOTION"
+                if (act != "STILL") {
+                    audio += 20f
+                    screen = false
+                }
+                
                 val latJitter = (Math.random() - 0.5) * 0.005
                 val lonJitter = (Math.random() - 0.5) * 0.005
                 entities.add(
                     RawGpsEntity(
                         latitude = baseLat + latJitter,
                         longitude = baseLon + lonJitter,
-                        timestamp = baseTime + (i * 60),
+                        timestamp = timestamp,
                         accuracy = 4.5f,
-                        activityState = if (i % 2 == 0) "STILL" else "IN_MOTION"
+                        activityState = act,
+                        audioLevel = audio,
+                        lightLevel = light,
+                        isScreenOn = screen
                     )
                 )
             }
