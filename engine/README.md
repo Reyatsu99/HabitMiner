@@ -29,6 +29,23 @@ engine/
 
 ---
 
+## Quick Start
+
+```bash
+# From the project root (Pervasive Computing/)
+# 1. Create and activate the virtual environment (one-time setup)
+python3 -m venv .venv2
+.venv2/bin/pip install pandas numpy scikit-learn scipy folium
+
+# 2. Run the full pipeline (synthetic 7-day benchmark data)
+cd engine
+../.venv2/bin/python main.py
+
+# 3. Open the generated report in your browser
+xdg-open habitminer_report.html   # Linux
+# or just drag the file into your browser
+```
+
 ## Execution Workflow (Phase 1 Baseline)
 
 1. Load dataset via `parser.py`.
@@ -36,3 +53,4 @@ engine/
 3. Cluster semantic POIs via `stdbscan.py`.
 4. Train Markov sequence predictor via `markov_model.py`.
 5. Compute routine stability and drift via `routine_analytics.py`.
+6. Generate the interactive HTML dashboard via `visualize.py`.

@@ -38,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.habitminer.data.TrajectoryReplayManager
+import com.habitminer.data.GeoLifeDataLoader
 import com.habitminer.engine.HabitUiState
 import com.habitminer.engine.HabitViewModel
 import com.habitminer.service.LocationTrackingService
@@ -122,6 +123,16 @@ fun HabitMinerApp(vm: HabitViewModel = viewModel()) {
                                 )
                             }
                         },
+                        onLoadGeoLife = {
+                            GeoLifeDataLoader(context).loadIntoDatabase { count ->
+                                Toast.makeText(
+                                    context,
+                                    if (count > 0) "Loaded $count real GeoLife GPS points!"
+                                    else "demo_trajectory.json not found in assets. Run export script first.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        },
                         onLoadDemo = {
                             TrajectoryReplayManager(context).injectSyntheticDemoData(50)
                             Toast.makeText(context, "Loaded 50 demo GPS points!", Toast.LENGTH_SHORT).show()
@@ -146,9 +157,10 @@ fun HabitMinerApp(vm: HabitViewModel = viewModel()) {
 @Composable
 fun HomeScreen(
     state: HabitUiState,
-    onStartStop: () -> Unit,
-    onLoadDemo:  () -> Unit,
-    onExport:    () -> Unit
+    onStartStop:   () -> Unit,
+    onLoadGeoLife: () -> Unit,
+    onLoadDemo:    () -> Unit,
+    onExport:      () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -178,6 +190,17 @@ fun HomeScreen(
         item { StatsRow(state = state) }
 
         // Actions
+        item {
+            Button(
+                onClick = onLoadGeoLife,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("🗂️  Load Real GeoLife Dataset", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
