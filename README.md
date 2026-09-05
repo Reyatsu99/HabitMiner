@@ -31,19 +31,24 @@ These habits and predictions are visualized in a Jetpack Compose UI via the **In
 
 ---
 
-## ⚠️ Current Gaps & Flaws
-While the app successfully demonstrates sensor fusion, it is currently a **prototype** and suffers from several architectural gaps:
-1. **Severe Battery Drain**: The app polls GPS every 3 seconds and keeps a continuous lock on the microphone (`MediaRecorder`) to sample audio. In a real-world scenario, this drains the battery extremely fast. Production apps must use Duty Cycling (e.g., sample for 5 seconds every 5 minutes).
-2. **Brittle Intelligence (Heuristics)**: The habit detection relies on hard-coded `if-else` thresholds. For example, if a user sleeps with a nightlight on or works night shifts, the static rules completely fail. A robust app requires Machine Learning (e.g., an on-device TFLite model) to learn non-linear patterns.
-3. **Android OS Restrictions**: The app struggles with Android 11+ background location restrictions. It requires explicit user navigation to settings to grant "Allow all the time" location access, otherwise the OS kills the tracker in the background.
+## ⚠️ Current Gaps & Flaws: Why It Is Not a Usable App
+While the app successfully demonstrates a UI concept for sensor fusion, it is fundamentally **unusable as a real-world daily habit tracker** in its current state. The key architectural flaws are:
+
+1. **Post-Processing Delay (No Real-Time Action)**: The engine relies on finding complete "Stay Points" before it runs its logic. If you sit down to focus, the app will not recognize it until *after* you have left the location 4 hours later. A real habit tracker needs a real-time sliding window to provide actionable notifications (e.g., "You've been focusing for 2 hours").
+2. **No Tangible Value or Goals**: The app acts strictly as a passive data logger. It provides no daily goals, no real-time feedback, and no interactive tracking mechanics. It just dumps predicted labels onto a static UI screen.
+3. **Severe Battery Drain (Hardware Lock)**: To sample audio, the service holds a continuous lock on the microphone (`MediaRecorder`). This prevents the Android OS from ever entering Doze (deep sleep) mode. Running this app will drain a modern smartphone battery in a matter of hours, making it impossible to use as a "daily" tracker.
+4. **Brittle, Easily Fooled Heuristics**: The `HabitEngine` uses rigid, top-down `if-else` statements. If you leave your phone on a quiet desk and walk away to socialize, the app will confidently record "Deep Focus." If you work a night shift, the app will fail to understand you are awake. 
+5. **Android OS Restrictions**: The app struggles with Android 11+ background location restrictions. It requires manual user intervention in the Settings app to grant "Allow all the time" location access, otherwise the OS aggressively kills the background service.
 
 ---
 
-## 🌐 Dataset Drawbacks & Real-World Location
-During development and demonstration, HabitMiner leverages the renowned **Microsoft GeoLife** dataset. However, this dataset comes with significant drawbacks for context-aware computing:
-- **GPS-Only Limitation**: GeoLife only contains raw GPS coordinates (latitude, longitude, timestamp). It completely lacks the rich context (audio, light, screen state) that HabitMiner relies on. To make the demo work, the app mathematically injects **simulated, synthetic sensor data** into the GeoLife coordinates based on the hour of the day.
-- **Beijing Bias**: The vast majority of GeoLife trajectories are centralized in Beijing, China. When loading the demo data, the map will snap to Beijing. 
-- **Real-World Tracking (Your Location)**: Despite the demo data, HabitMiner's `LocationTrackingService` is fully functional worldwide. When you tap **Start Tracking**, the app will drop the Beijing demo data and begin recording your actual, real-world GPS coordinates and live sensor data wherever you are located.
+## 🌐 Dataset Drawbacks: What GeoLife is Actually Doing
+During development and demonstration, HabitMiner leverages the renowned **Microsoft GeoLife** dataset, which is accessed via the `Load Real GeoLife Dataset` button. However, using this dataset for a "Multi-Modal Sensor" app is entirely superficial:
+
+- **GeoLife Has No Context Sensors**: GeoLife only contains raw GPS coordinates (latitude, longitude, timestamp). It completely lacks the audio, light, and screen state data that HabitMiner claims to analyze.
+- **Faked (Synthetic) Data Injection**: To make the UI demo work, the app's `GeoLifeDataLoader` literally generates fake, mathematically simulated sensor values (e.g., injecting low light values if the timestamp says it's night) and attaches them to the GPS points. The "Insights" you see from the demo are completely hallucinated by the engine based on faked data, rather than real multi-sensor fusion.
+- **Beijing Bias**: 90%+ of GeoLife trajectories are localized in Beijing, China. When replaying the demo data, the map will instantly snap to Beijing. 
+- **Real-World Tracking (Your Location)**: Despite the demo data limitations, HabitMiner's `LocationTrackingService` is built to function globally. When you tap **Start Tracking**, the app ignores the GeoLife faked data and records your actual, real-world GPS coordinates and live hardware sensors.
 
 ---
 
