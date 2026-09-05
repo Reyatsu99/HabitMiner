@@ -8,21 +8,42 @@
 
 ---
 
-## 🎯 Goal
-HabitMiner now goes beyond raw GPS. It fuses **four on‑device sensors** (Location, Ambient Audio, Light, Screen state) to infer high‑level daily habits such as:
-- **Sleeping** (night, dark, quiet, screen off)
-- **Deep Focus** (quiet, screen off)
-- **Socializing / Active** (loud environments)
-- **Phone Usage** (high screen‑on ratio)
-- **Commuting** (gap between stay points)
-- **Other** (fallback)
+## 🎯 What HabitMiner is Currently Doing
+HabitMiner is an offline-first Android application that goes beyond simple GPS tracking. It functions as a multi-modal edge sensor, tracking four core metrics simultaneously:
+1. **Spatial Data (GPS)**: Live location tracking.
+2. **Acoustic Data**: Ambient noise levels (dB) derived from microphone amplitude (without saving raw audio).
+3. **Ambient Light (Lux)**: Captured via the hardware light sensor.
+4. **Device Interaction**: Tracking screen-on/screen-off events.
 
-The Android app records this multi‑modal data, stores it in a Room database, and the built‑in **HabitEngine** class classifies the behavior into a **Behavioral Timeline** displayed in the Insights screen.
+The on-device **HabitEngine** aggregates this data during stationary "Stay Points" and applies heuristic rules to classify the user's behavior into semantic habits:
+- **Sleeping**: (Night time + Dark + Quiet + Screen Off)
+- **Deep Focus**: (Quiet + Screen Off)
+- **Socializing / Active**: (Loud environments)
+- **Phone Usage**: (High screen-on ratio)
+- **Commuting**: (Transit between two distinct locations)
+
+These habits are visualized in a Jetpack Compose UI via the **Insights** screen, while the **Map** screen plots the trajectories on a bundled, fully offline Leaflet map.
+
+---
+
+## ⚠️ Current Gaps & Flaws
+While the app successfully demonstrates sensor fusion, it is currently a **prototype** and suffers from several architectural gaps:
+1. **Severe Battery Drain**: The app polls GPS every 3 seconds and keeps a continuous lock on the microphone (`MediaRecorder`) to sample audio. In a real-world scenario, this drains the battery extremely fast. Production apps must use Duty Cycling (e.g., sample for 5 seconds every 5 minutes).
+2. **Brittle Intelligence (Heuristics)**: The habit detection relies on hard-coded `if-else` thresholds. For example, if a user sleeps with a nightlight on or works night shifts, the static rules completely fail. A robust app requires Machine Learning (e.g., an on-device TFLite model) to learn non-linear patterns.
+3. **Android OS Restrictions**: The app struggles with Android 11+ background location restrictions. It requires explicit user navigation to settings to grant "Allow all the time" location access, otherwise the OS kills the tracker in the background.
+
+---
+
+## 🌐 Dataset Drawbacks & Real-World Location
+During development and demonstration, HabitMiner leverages the renowned **Microsoft GeoLife** dataset. However, this dataset comes with significant drawbacks for context-aware computing:
+- **GPS-Only Limitation**: GeoLife only contains raw GPS coordinates (latitude, longitude, timestamp). It completely lacks the rich context (audio, light, screen state) that HabitMiner relies on. To make the demo work, the app mathematically injects **simulated, synthetic sensor data** into the GeoLife coordinates based on the hour of the day.
+- **Beijing Bias**: The vast majority of GeoLife trajectories are centralized in Beijing, China. When loading the demo data, the map will snap to Beijing. 
+- **Real-World Tracking (Your Location)**: Despite the demo data, HabitMiner's `LocationTrackingService` is fully functional worldwide. When you tap **Start Tracking**, the app will drop the Beijing demo data and begin recording your actual, real-world GPS coordinates and live sensor data wherever you are located.
 
 ---
 
 ## 🏗️ Architecture
-```
+```text
 +-------------------+        +----------------------+        +-------------------+
 | Android App       |  -->   | Room DB (habitminer) |  -->   | HabitEngine (Kotlin) |
 | - Location (Fused) |       | - latitude            |       | - Detect stay points |
@@ -36,77 +57,22 @@ The Android app records this multi‑modal data, stores it in a Room database, a
                             +----------------------+
 ```
 
-*The original Python research engine (stay‑point extraction, Markov models, entropy analysis) remains unchanged and can still be used on the exported JSON data.*
-
----
-
-## 📦 Repository Layout
-```
-Pervasive Computing/
-├─ README.md                # <- You are here
-├─ android/                 # Android source (Kotlin)
-│   ├─ app/                # Gradle module
-│   │   └─ src/main/java/com/habitminer/
-│   │       ├─ data/               # Room entities & DB
-│   │       ├─ engine/             # ViewModel, StayPointDetector, HabitEngine
-│   │       ├─ service/            # LocationTrackingService (multisensor)
-│   │       └─ ui/                 # Compose UI (Insights, Map, etc.)
-│   └─ build.gradle                 # App Gradle file
-├─ engine/                  # Python research engine (unchanged)
-├─ data/                    # GeoLife dataset (git‑ignored)
-└─ docs/                    # Architecture & methodology docs
-```
+*The original Python research engine remains unchanged in the `/engine/` directory and can still be used on exported JSON data for deep Markov model analysis.*
 
 ---
 
 ## 🚀 Getting Started
 ### Prerequisites
-- Android Studio Flamingo or newer (JDK 17)
-- A physical Android device (or emulator with microphone & light sensor support) **or** grant microphone permission on a real device.
-- (Optional) Python 3.10+ if you want to run the offline research engine on exported JSON.
+- Android Studio Flamingo or newer (JDK 17).
+- A physical Android device (emulators lack dynamic light/audio sensors).
 
-### Build & Run the Android App
+### Build & Run
 ```bash
-# From the project root
 cd android
-./gradlew assembleDebug   # builds the APK (gradlew wrapper is included)
-# Install on a device
+./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-When the app launches, it will request **Location** and **Microphone** permissions. Tap **Start Tracking** to begin collecting data.
-
-### Export / Replay
-- **Export**: In the Home screen tap **Load Real GeoLife Dataset** (or press the export button) – this writes `demo_trajectory.json` to `android/app/src/main/assets/`.
-- **Replay**: The app can replay any exported JSON via the **Map** screen.
-
----
-
-## 📊 Features
-- **Multi‑sensor collection** (GPS, audio amplitude, ambient light, screen state)
-- **Stay‑point detection** (spatial‑temporal thresholds)
-- **POI clustering** (ST‑DBSCAN, unchanged from original)
-- **HabitEngine** → Behavioral Timeline UI component
-- **Predictability score** (from original Markov model) still shown on the Home screen
-- **Export** of data to JSON for offline Python analysis
-
----
-
-## 🧪 Demo
-1. Open the app and start tracking.
-2. Simulate a *sleep* scenario: place the phone in a dark drawer, keep it silent for ~10 minutes, screen off.
-3. Simulate *phone‑usage*: turn the screen on and interact for a few minutes.
-4. Go to **Insights** – you will see entries like:
-   - `😴 Sleeping · Home (420 m)`
-   - `📱 Phone Usage · In Transit (15 m)`
-5. The **Predictability** score updates as more data is collected.
-
----
-
-## 📚 Further Reading
-- `docs/ARCHITECTURE.md` – detailed system diagram.
-- `engine/README.md` – how to run the Python research pipeline on exported data.
-
----
+*Note: Ensure you grant Location (Allow all the time) and Microphone permissions for the app to function properly.*
 
 ## 📄 License
 Distributed under the MIT License. See `LICENSE` for details.
