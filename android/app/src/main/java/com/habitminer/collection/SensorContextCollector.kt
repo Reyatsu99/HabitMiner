@@ -5,6 +5,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Handler
+import android.os.Looper
 import com.habitminer.data.ContextSnapshotEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -73,7 +75,8 @@ class SensorContextCollector
                             ) {}
                         }
 
-                    val registered = sensorManager.registerListener(listener, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
+                    val handler = Handler(Looper.getMainLooper())
+                    val registered = sensorManager.registerListener(listener, lightSensor, SensorManager.SENSOR_DELAY_NORMAL, handler)
                     if (!registered) {
                         continuation.resume(null)
                         return@suspendCancellableCoroutine
@@ -133,7 +136,8 @@ class SensorContextCollector
                             ) {}
                         }
 
-                    val registered = sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_GAME)
+                    val handler = Handler(Looper.getMainLooper())
+                    val registered = sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_GAME, handler)
                     if (!registered) {
                         continuation.resume(null)
                         return@suspendCancellableCoroutine
