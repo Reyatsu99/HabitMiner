@@ -21,12 +21,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.habitminer.engine.HabitViewModel
 import com.habitminer.ui.theme.HabitMinerTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -40,55 +42,83 @@ class MainActivity : ComponentActivity() {
         setContent {
             HabitMinerTheme {
                 val state by viewModel.uiState.collectAsStateWithLifecycle()
-                var selectedTab by remember { mutableIntStateOf(0) }
+                val navController = rememberNavController()
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
 
                 Scaffold(
                     bottomBar = {
-                        NavigationBar(
-                            containerColor = Color(0xFF1E293B),
-                        ) {
-                            NavigationBarItem(
-                                icon = { Icon(Icons.Default.Home, contentDescription = "Today") },
-                                label = { Text("Today") },
-                                selected = selectedTab == 0,
-                                onClick = { selectedTab = 0 },
-                                colors =
-                                    NavigationBarItemDefaults.colors(
-                                        selectedIconColor = Color(0xFF38BDF8),
-                                        unselectedIconColor = Color.LightGray,
-                                        selectedTextColor = Color(0xFF38BDF8),
-                                        unselectedTextColor = Color.LightGray,
-                                        indicatorColor = Color(0xFF0F172A),
-                                    ),
-                            )
-                            NavigationBarItem(
-                                icon = { Icon(Icons.Default.Psychology, contentDescription = "Habits") },
-                                label = { Text("Habits") },
-                                selected = selectedTab == 1,
-                                onClick = { selectedTab = 1 },
-                                colors =
-                                    NavigationBarItemDefaults.colors(
-                                        selectedIconColor = Color(0xFF38BDF8),
-                                        unselectedIconColor = Color.LightGray,
-                                        selectedTextColor = Color(0xFF38BDF8),
-                                        unselectedTextColor = Color.LightGray,
-                                        indicatorColor = Color(0xFF0F172A),
-                                    ),
-                            )
-                            NavigationBarItem(
-                                icon = { Icon(Icons.Default.Analytics, contentDescription = "Insights") },
-                                label = { Text("Insights") },
-                                selected = selectedTab == 2,
-                                onClick = { selectedTab = 2 },
-                                colors =
-                                    NavigationBarItemDefaults.colors(
-                                        selectedIconColor = Color(0xFF38BDF8),
-                                        unselectedIconColor = Color.LightGray,
-                                        selectedTextColor = Color(0xFF38BDF8),
-                                        unselectedTextColor = Color.LightGray,
-                                        indicatorColor = Color(0xFF0F172A),
-                                    ),
-                            )
+                        if (state.hasUsagePermission) {
+                            NavigationBar(
+                                containerColor = Color(0xFF1E293B),
+                            ) {
+                                NavigationBarItem(
+                                    icon = { Icon(Icons.Default.Home, contentDescription = "Today") },
+                                    label = { Text("Today") },
+                                    selected = currentRoute == Screen.Home.route,
+                                    onClick = {
+                                        navController.navigate(Screen.Home.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    colors =
+                                        NavigationBarItemDefaults.colors(
+                                            selectedIconColor = Color(0xFF38BDF8),
+                                            unselectedIconColor = Color.LightGray,
+                                            selectedTextColor = Color(0xFF38BDF8),
+                                            unselectedTextColor = Color.LightGray,
+                                            indicatorColor = Color(0xFF0F172A),
+                                        ),
+                                )
+                                NavigationBarItem(
+                                    icon = { Icon(Icons.Default.Psychology, contentDescription = "Habits") },
+                                    label = { Text("Habits") },
+                                    selected = currentRoute == Screen.Habits.route,
+                                    onClick = {
+                                        navController.navigate(Screen.Habits.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    colors =
+                                        NavigationBarItemDefaults.colors(
+                                            selectedIconColor = Color(0xFF38BDF8),
+                                            unselectedIconColor = Color.LightGray,
+                                            selectedTextColor = Color(0xFF38BDF8),
+                                            unselectedTextColor = Color.LightGray,
+                                            indicatorColor = Color(0xFF0F172A),
+                                        ),
+                                )
+                                NavigationBarItem(
+                                    icon = { Icon(Icons.Default.Analytics, contentDescription = "Insights") },
+                                    label = { Text("Insights") },
+                                    selected = currentRoute == Screen.Insights.route,
+                                    onClick = {
+                                        navController.navigate(Screen.Insights.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    colors =
+                                        NavigationBarItemDefaults.colors(
+                                            selectedIconColor = Color(0xFF38BDF8),
+                                            unselectedIconColor = Color.LightGray,
+                                            selectedTextColor = Color(0xFF38BDF8),
+                                            unselectedTextColor = Color.LightGray,
+                                            indicatorColor = Color(0xFF0F172A),
+                                        ),
+                                )
+                            }
                         }
                     },
                     containerColor = Color(0xFF0F172A),
@@ -97,7 +127,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding),
                         color = Color(0xFF0F172A),
                     ) {
-                        if (!state.hasUsagePermission) {
+                        if (!state.hasUsagePermission || !state.hasRuntimePermissions) {
                             PermissionScreen(
                                 hasUsage = state.hasUsagePermission,
                                 onRequestUsage = {
@@ -105,10 +135,10 @@ class MainActivity : ComponentActivity() {
                                 },
                             )
                         } else {
-                            when (selectedTab) {
-                                0 -> HomeScreen(state, viewModel)
-                                1 -> HabitsScreen(state)
-                                2 -> InsightsScreen(state)
+                            NavHost(navController = navController, startDestination = Screen.Home.route) {
+                                composable(Screen.Home.route) { HomeScreen(state, viewModel) }
+                                composable(Screen.Habits.route) { HabitsScreen(state) }
+                                composable(Screen.Insights.route) { InsightsScreen(state) }
                             }
                         }
                     }

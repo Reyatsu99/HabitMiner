@@ -78,6 +78,7 @@ dependencies {
     implementation 'androidx.activity:activity-compose:1.8.2'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0'
     implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.7.0'
+    implementation 'androidx.navigation:navigation-compose:2.7.7'
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
@@ -98,6 +99,9 @@ dependencies {
 
     // ==================== Data Serialization ====================
     implementation 'com.google.code.gson:gson:2.10.1'
+
+    // ==================== Immutable Collections ====================
+    implementation 'org.jetbrains.kotlinx:kotlinx-collections-immutable:0.3.7'
 
     // ==================== Coroutines ====================
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'

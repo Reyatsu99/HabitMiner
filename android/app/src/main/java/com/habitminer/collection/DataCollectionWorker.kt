@@ -1,8 +1,8 @@
 package com.habitminer.collection
 
 import android.content.Context
-import android.os.PowerManager
 import android.os.BatteryManager
+import android.os.PowerManager
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -47,17 +47,21 @@ class DataCollectionWorker(
             val isScreenOn = pm.isInteractive
 
             val now = System.currentTimeMillis()
-            val startOfDay = Calendar.getInstance().run {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-                timeInMillis
-            }
+            val startOfDay =
+                Calendar.getInstance().run {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                    timeInMillis
+                }
             val unlockCount = eventDao.countSince(DeviceEventReceiver.EVENT_UNLOCK, startOfDay)
-            val notifCount = if (HabitNotificationListener.isEnabled(appContext)) {
-                eventDao.countSince(DeviceEventReceiver.EVENT_NOTIFICATION, now - TimeUnit.HOURS.toMillis(1))
-            } else -1
+            val notifCount =
+                if (HabitNotificationListener.isEnabled(appContext)) {
+                    eventDao.countSince(DeviceEventReceiver.EVENT_NOTIFICATION, now - TimeUnit.HOURS.toMillis(1))
+                } else {
+                    -1
+                }
             val batteryManager = appContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
             val batteryLevel = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
             val shouldSampleSensors = isScreenOn && (batteryLevel >= 15 || batteryManager.isCharging)

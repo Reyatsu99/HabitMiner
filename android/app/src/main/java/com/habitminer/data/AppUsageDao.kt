@@ -52,14 +52,20 @@ interface AppUsageDao {
     @Query("SELECT COUNT(*) || ':' || COALESCE(MAX(endTime), 0) || ':' || COALESCE(SUM(durationMs), 0) FROM app_usage")
     suspend fun getUsageRevision(): String
 
-    @Query("SELECT COUNT(*) || ':' || COALESCE(MAX(endTime), 0) || ':' || COALESCE(SUM(durationMs), 0) FROM app_usage WHERE startTime < :beforeMs")
+    @Query(
+        "SELECT COUNT(*) || ':' || COALESCE(MAX(endTime), 0) || ':' || " +
+            "COALESCE(SUM(durationMs), 0) FROM app_usage WHERE startTime < :beforeMs",
+    )
     suspend fun getModelRevision(beforeMs: Long): String
 
     @Query("SELECT DISTINCT packageName FROM app_usage WHERE appName = packageName")
     suspend fun getPackagesWithPackageNameLabels(): List<String>
 
     @Query("UPDATE app_usage SET appName = :appName WHERE packageName = :packageName AND appName = packageName")
-    suspend fun updateFallbackAppName(packageName: String, appName: String)
+    suspend fun updateFallbackAppName(
+        packageName: String,
+        appName: String,
+    )
 
     @Query("DELETE FROM app_usage WHERE startTime < :timestampMs")
     suspend fun deleteOlderThan(timestampMs: Long)

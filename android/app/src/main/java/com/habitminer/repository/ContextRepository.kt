@@ -33,7 +33,10 @@ class ContextRepository
 
         suspend fun getPackagesWithFallbackNames(): List<String> = appUsageDao.getPackagesWithPackageNameLabels()
 
-        suspend fun updateFallbackAppName(packageName: String, appName: String) = appUsageDao.updateFallbackAppName(packageName, appName)
+        suspend fun updateFallbackAppName(
+            packageName: String,
+            appName: String,
+        ) = appUsageDao.updateFallbackAppName(packageName, appName)
 
         suspend fun getUsageCount(): Int = appUsageDao.getUsageCount().first()
 

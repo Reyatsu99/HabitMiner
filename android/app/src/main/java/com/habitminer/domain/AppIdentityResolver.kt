@@ -59,28 +59,30 @@ open class AppIdentityResolver
 
         private fun fallbackLabel(packageName: String): String {
             val leaf = packageName.substringAfterLast('.').replace('_', ' ').replace('-', ' ')
-            val known = mapOf(
-                "youtube" to "YouTube",
-                "gm" to "Gmail",
-                "chrome" to "Chrome",
-                "maps" to "Google Maps",
-                "facebook" to "Facebook",
-                "instagram" to "Instagram",
-                "whatsapp" to "WhatsApp",
-                "messenger" to "Messenger",
-                "tiktok" to "TikTok",
-                "twitter" to "X",
-                "linkedin" to "LinkedIn",
-                "spotify" to "Spotify",
-            )
-            val knownPackages = mapOf(
-                "com.instagram.android" to "Instagram",
-                "com.facebook.katana" to "Facebook",
-                "com.twitter.android" to "X",
-                "com.snapchat.android" to "Snapchat",
-                "com.reddit.frontpage" to "Reddit",
-                "com.google.android.apps.youtube.music" to "YouTube Music",
-            )
+            val known =
+                mapOf(
+                    "youtube" to "YouTube",
+                    "gm" to "Gmail",
+                    "chrome" to "Chrome",
+                    "maps" to "Google Maps",
+                    "facebook" to "Facebook",
+                    "instagram" to "Instagram",
+                    "whatsapp" to "WhatsApp",
+                    "messenger" to "Messenger",
+                    "tiktok" to "TikTok",
+                    "twitter" to "X",
+                    "linkedin" to "LinkedIn",
+                    "spotify" to "Spotify",
+                )
+            val knownPackages =
+                mapOf(
+                    "com.instagram.android" to "Instagram",
+                    "com.facebook.katana" to "Facebook",
+                    "com.twitter.android" to "X",
+                    "com.snapchat.android" to "Snapchat",
+                    "com.reddit.frontpage" to "Reddit",
+                    "com.google.android.apps.youtube.music" to "YouTube Music",
+                )
             return knownPackages[packageName] ?: known[leaf.lowercase()] ?: leaf.split(' ').joinToString(" ") { word ->
                 word.replaceFirstChar { char -> char.uppercase() }
             }

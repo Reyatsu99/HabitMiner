@@ -23,7 +23,11 @@ interface ContextDao {
     @Query("SELECT * FROM context_snapshots WHERE timestamp >= :sinceMs ORDER BY timestamp ASC")
     suspend fun getSnapshotsSince(sinceMs: Long): List<ContextSnapshotEntity>
 
-    @Query("SELECT COALESCE(date(MAX(timestamp) / 1000, 'unixepoch', 'localtime'), '') || ':' || CAST(CAST(strftime('%H', MAX(timestamp) / 1000, 'unixepoch', 'localtime') AS INTEGER) / 6 AS TEXT) FROM context_snapshots")
+    @Query(
+        "SELECT COALESCE(date(MAX(timestamp) / 1000, 'unixepoch', 'localtime'), '') || ':' || " +
+            "CAST(CAST(strftime('%H', MAX(timestamp) / 1000, 'unixepoch', 'localtime') AS INTEGER) / 6 AS TEXT) " +
+            "FROM context_snapshots",
+    )
     suspend fun getSnapshotRevision(): String
 
     @Query("SELECT COUNT(*) || ':' || COALESCE(MAX(timestamp), 0) FROM context_snapshots WHERE timestamp < :beforeMs")

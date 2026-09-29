@@ -85,7 +85,10 @@ class DeviationDetector
                             DeviationResult(
                                 timeBin = bin,
                                 deviationType = "EXCESS_DURATION",
-                                description = "$cat was used for ${formatDuration(todayDuration)} in the $timeSlot, versus your usual ${formatDuration(expectedDuration)} by now.",
+                                description =
+                                    "$cat was used for ${formatDuration(todayDuration)} " +
+                                        "in the $timeSlot, versus your usual " +
+                                        "${formatDuration(expectedDuration)} by now.",
                                 zScore = zScore,
                                 normalizedScore = norm,
                                 affectedCategory = cat,
@@ -104,7 +107,10 @@ class DeviationDetector
                             DeviationResult(
                                 timeBin = bin,
                                 deviationType = "NEW_BEHAVIOR",
-                                description = "$cat was used for ${formatDuration(duration)} in the $timeSlot, but it is not part of your usual routine for this time.",
+                                description =
+                                    "$cat was used for ${formatDuration(duration)} " +
+                                        "in the $timeSlot, but it is not part of your usual " +
+                                        "routine for this time.",
                                 zScore = 2.0f,
                                 normalizedScore = 0.8f,
                                 affectedCategory = cat,
@@ -119,7 +125,9 @@ class DeviationDetector
                         DeviationResult(
                             timeBin = bin,
                             deviationType = "MISSING_ROUTINE",
-                            description = "Your usual $timeSlot activity of about ${formatDuration(base.avgScreenTimeMs)} has not appeared today.",
+                            description =
+                                "Your usual $timeSlot activity of about " +
+                                    "${formatDuration(base.avgScreenTimeMs)} has not appeared today.",
                             zScore = -2.0f,
                             normalizedScore = 0.7f,
                             affectedCategory = "ALL",

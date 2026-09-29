@@ -15,30 +15,32 @@ class BaselineBuilderTest {
 
     @Test
     fun `builds a five day baseline with context averages`() {
-        val usages = (1..5).map { day ->
-            AppUsageEntity(
-                packageName = "com.example.reader",
-                appName = "Reader",
-                appCategory = "EDUCATION",
-                startTime = weekdayStart(day),
-                endTime = weekdayStart(day) + 30 * 60_000,
-                durationMs = 30 * 60_000,
-                timeSlot = "MORNING",
-                dayType = "WEEKDAY",
-            )
-        }
-        val snapshots = usages.map { usage ->
-            ContextSnapshotEntity(
-                timestamp = usage.startTime,
-                motionState = "STILL",
-                lightLevel = 40f,
-                batteryLevel = 80,
-                isCharging = false,
-                isScreenOn = true,
-                unlockCount = 3,
-                notificationCount = 1,
-            )
-        }
+        val usages =
+            (1..5).map { day ->
+                AppUsageEntity(
+                    packageName = "com.example.reader",
+                    appName = "Reader",
+                    appCategory = "EDUCATION",
+                    startTime = weekdayStart(day),
+                    endTime = weekdayStart(day) + 30 * 60_000,
+                    durationMs = 30 * 60_000,
+                    timeSlot = "MORNING",
+                    dayType = "WEEKDAY",
+                )
+            }
+        val snapshots =
+            usages.map { usage ->
+                ContextSnapshotEntity(
+                    timestamp = usage.startTime,
+                    motionState = "STILL",
+                    lightLevel = 40f,
+                    batteryLevel = 80,
+                    isCharging = false,
+                    isScreenOn = true,
+                    unlockCount = 3,
+                    notificationCount = 1,
+                )
+            }
 
         val baseline = builder.buildBaseline(usages, snapshots).single()
 
@@ -52,18 +54,19 @@ class BaselineBuilderTest {
 
     @Test
     fun `does not build a baseline from fewer than five days`() {
-        val usages = (1..4).map { day ->
-            AppUsageEntity(
-                packageName = "com.example.reader",
-                appName = "Reader",
-                appCategory = "EDUCATION",
-                startTime = weekdayStart(day),
-                endTime = weekdayStart(day) + 60_000,
-                durationMs = 60_000,
-                timeSlot = "MORNING",
-                dayType = "WEEKDAY",
-            )
-        }
+        val usages =
+            (1..4).map { day ->
+                AppUsageEntity(
+                    packageName = "com.example.reader",
+                    appName = "Reader",
+                    appCategory = "EDUCATION",
+                    startTime = weekdayStart(day),
+                    endTime = weekdayStart(day) + 60_000,
+                    durationMs = 60_000,
+                    timeSlot = "MORNING",
+                    dayType = "WEEKDAY",
+                )
+            }
 
         assertTrue(builder.buildBaseline(usages, emptyList()).isEmpty())
     }

@@ -10,7 +10,10 @@ interface DeviceEventDao {
     suspend fun insert(event: DeviceEventEntity)
 
     @Query("SELECT COUNT(*) FROM device_events WHERE eventType = :eventType AND timestamp >= :sinceMs")
-    suspend fun countSince(eventType: String, sinceMs: Long): Int
+    suspend fun countSince(
+        eventType: String,
+        sinceMs: Long,
+    ): Int
 
     @Query("DELETE FROM device_events WHERE timestamp < :timestampMs")
     suspend fun deleteOlderThan(timestampMs: Long)

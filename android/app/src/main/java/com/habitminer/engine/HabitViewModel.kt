@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Context
 import android.os.Build
 import android.os.Process
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.habitminer.collection.DataCollectionWorker
@@ -17,6 +18,12 @@ import com.habitminer.domain.AppIdentityResolver
 import com.habitminer.repository.ContextRepository
 import com.habitminer.repository.HabitRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,11 +33,12 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 import javax.inject.Inject
 
+@Immutable
 data class HabitUiState(
     val isLoading: Boolean = true,
     val isSyncing: Boolean = false,
@@ -39,11 +47,11 @@ data class HabitUiState(
     val todayScreenTimeMs: Long = 0L,
     val todayUnlocks: Int = 0,
     val todayTopApp: String = "",
-    val todayUsageByApp: Map<String, Long> = emptyMap(),
-    val discoveredHabits: List<DiscoveredHabitEntity> = emptyList(),
-    val todayDeviations: List<DeviationEntity> = emptyList(),
+    val todayUsageByApp: ImmutableMap<String, Long> = persistentMapOf(),
+    val discoveredHabits: ImmutableList<DiscoveredHabitEntity> = persistentListOf(),
+    val todayDeviations: ImmutableList<DeviationEntity> = persistentListOf(),
     val overallDeviationScore: Float = 0f,
-    val predictions: List<PredictionEngine.Prediction> = emptyList(),
+    val predictions: ImmutableList<PredictionEngine.Prediction> = persistentListOf(),
     val predictabilityScore: Float = 0f,
     val baselineStatus: String = "Building baseline...",
     val hasEnoughData: Boolean = false,
@@ -98,10 +106,12 @@ class HabitViewModel
                 }
             val hasUsage = mode == AppOpsManager.MODE_ALLOWED
             val hasNotif = HabitNotificationListener.isEnabled(application)
-            val retentionDays = application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
-                .getInt("retention_days", 90).coerceIn(30, 180)
-            val collectionEnabled = application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
-                .getBoolean("collection_enabled", true)
+            val retentionDays =
+                application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
+                    .getInt("retention_days", 90).coerceIn(30, 180)
+            val collectionEnabled =
+                application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
+                    .getBoolean("collection_enabled", true)
 
             _uiState.update {
                 it.copy(
@@ -139,9 +149,10 @@ class HabitViewModel
                     val usages =
                         when {
                             count == 0 -> usageDataCollector.collectLast14Days()
-                            else -> usageDataCollector.collectUsageSince(
-                                lastTimestamp ?: System.currentTimeMillis() - 24 * 60 * 60 * 1000L,
-                            )
+                            else ->
+                                usageDataCollector.collectUsageSince(
+                                    lastTimestamp ?: System.currentTimeMillis() - 24 * 60 * 60 * 1000L,
+                                )
                         }
                     if (usages.isNotEmpty()) contextRepository.insertAllAppUsage(usages)
                     DataCollectionWorker.schedulePeriodicWork(application)
@@ -276,18 +287,20 @@ class HabitViewModel
 
                 launch {
                     contextRepository.getTodayUsage(startOfDay).collect { usage ->
-                        val (validUsage, totalTime, categories) = withContext(Dispatchers.Default) {
-                            val valid = usage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
-                            val byApp = valid.groupBy { appIdentityResolver.getAppName(it.packageName) }
-                                .mapValues { entry -> entry.value.sumOf { item -> item.durationMs } }
-                            Triple(valid, valid.sumOf { it.durationMs }, byApp)
-                        }
+                        val (validUsage, totalTime, categories) =
+                            withContext(Dispatchers.Default) {
+                                val valid = usage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
+                                val byApp =
+                                    valid.groupBy { appIdentityResolver.getAppName(it.packageName) }
+                                        .mapValues { entry -> entry.value.sumOf { item -> item.durationMs } }
+                                Triple(valid, valid.sumOf { it.durationMs }, byApp)
+                            }
                         val topCategory = categories.maxByOrNull { it.value }?.key.orEmpty()
 
                         _uiState.update {
                             it.copy(
                                 todayScreenTimeMs = totalTime,
-                                todayUsageByApp = categories,
+                                todayUsageByApp = categories.toImmutableMap(),
                                 todayTopApp = topCategory,
                             )
                         }
@@ -295,24 +308,30 @@ class HabitViewModel
                         if (validUsage.isNotEmpty()) {
                             val latest = validUsage.first()
                             val allUsage = contextRepository.getAllUsage().first()
-                            val predictions = withContext(Dispatchers.Default) {
-                                predictionEngine.predict(allUsage, appIdentityResolver.getAppName(latest.packageName), latest.timeSlot, latest.dayType)
-                            }
-                            _uiState.update { it.copy(predictions = predictions) }
+                            val predictions =
+                                withContext(Dispatchers.Default) {
+                                    predictionEngine.predict(
+                                        allUsage,
+                                        appIdentityResolver.getAppName(latest.packageName),
+                                        latest.timeSlot,
+                                        latest.dayType,
+                                    )
+                                }
+                            _uiState.update { it.copy(predictions = predictions.toImmutableList()) }
                         }
                     }
                 }
 
                 launch {
                     habitRepository.getAllHabits().collect { habits ->
-                        _uiState.update { it.copy(discoveredHabits = habits) }
+                        _uiState.update { it.copy(discoveredHabits = habits.toImmutableList()) }
                     }
                 }
 
                 launch {
                     habitRepository.getTodayDeviations(startOfDay).collect { devs ->
                         val overallScore = devs.maxOfOrNull { it.normalizedScore } ?: 0f
-                        _uiState.update { it.copy(todayDeviations = devs, overallDeviationScore = overallScore) }
+                        _uiState.update { it.copy(todayDeviations = devs.toImmutableList(), overallDeviationScore = overallScore) }
                     }
                 }
 
