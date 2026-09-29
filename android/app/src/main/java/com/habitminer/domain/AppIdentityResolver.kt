@@ -57,6 +57,13 @@ open class AppIdentityResolver
             }
         }
 
+        open fun getLauncherPackages(): List<String> {
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_HOME) }
+            return packageManager.queryIntentActivities(homeIntent, PackageManager.MATCH_ALL)
+                .mapNotNull { it.activityInfo?.packageName }
+                .distinct()
+        }
+
         private fun fallbackLabel(packageName: String): String {
             val leaf = packageName.substringAfterLast('.').replace('_', ' ').replace('-', ' ')
             val known =

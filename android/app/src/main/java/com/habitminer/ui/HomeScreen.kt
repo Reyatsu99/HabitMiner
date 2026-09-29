@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.habitminer.data.ContextSnapshotEntity
 import com.habitminer.engine.HabitUiState
@@ -299,39 +300,63 @@ fun DailySummaryGrid(
                 val hours = screenTimeMs / (1000 * 60 * 60)
                 val minutes = (screenTimeMs / (1000 * 60)) % 60
 
-                val targetMs = if (expectedScreenTimeMs > 0L) expectedScreenTimeMs else (4 * 60 * 60 * 1000L) // fallback if no baseline yet
-                val progress = (screenTimeMs.toFloat() / targetMs).coerceIn(0f, 1f)
-                val progressColor = if (progress > 0.8f) Color(0xFFF59E0B) else Color(0xFF38BDF8)
+                if (expectedScreenTimeMs > 0L) {
+                    val progress = (screenTimeMs.toFloat() / expectedScreenTimeMs).coerceIn(0f, 1f)
+                    val progressColor = if (progress > 0.8f) Color(0xFFF59E0B) else Color(0xFF38BDF8)
 
-                Box(contentAlignment = Alignment.Center) {
-                    Canvas(modifier = Modifier.size(100.dp)) {
-                        drawArc(
-                            color = progressColor.copy(alpha = 0.2f),
-                            startAngle = 270f,
-                            sweepAngle = 360f,
-                            useCenter = false,
-                            style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round),
-                        )
-                        drawArc(
-                            color = progressColor,
-                            startAngle = 270f,
-                            sweepAngle = 360f * progress,
-                            useCenter = false,
-                            style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round),
-                        )
+                    Box(contentAlignment = Alignment.Center) {
+                        Canvas(modifier = Modifier.size(100.dp)) {
+                            drawArc(
+                                color = progressColor.copy(alpha = 0.2f),
+                                startAngle = 270f,
+                                sweepAngle = 360f,
+                                useCenter = false,
+                                style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round),
+                            )
+                            drawArc(
+                                color = progressColor,
+                                startAngle = 270f,
+                                sweepAngle = 360f * progress,
+                                useCenter = false,
+                                style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round),
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${hours}h",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "${minutes}m",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            )
+                        }
                     }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "${hours}h",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = "${minutes}m",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        )
+                } else {
+                    Box(modifier = Modifier.size(100.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${hours}h",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "${minutes}m",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Building baseline",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
                 }
             }

@@ -45,7 +45,6 @@ abstract class AppDatabase : RoomDatabase() {
                         "habitminer_database",
                     )
                         .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
-                        .fallbackToDestructiveMigration()
                         .build()
                 instance = newInstance
                 newInstance

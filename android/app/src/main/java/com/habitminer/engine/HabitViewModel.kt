@@ -156,10 +156,14 @@ class HabitViewModel
                     val usages =
                         when {
                             count == 0 -> usageDataCollector.collectLast14Days()
-                            else ->
+                            else -> {
+                                val launcherPackages = appIdentityResolver.getLauncherPackages()
+                                val prevPkg = contextRepository.getLastUsedNonLauncherPackage(launcherPackages)
                                 usageDataCollector.collectUsageSince(
                                     lastTimestamp ?: System.currentTimeMillis() - 24 * 60 * 60 * 1000L,
+                                    prevPkg,
                                 )
+                            }
                         }
                     if (usages.isNotEmpty()) contextRepository.insertAllAppUsage(usages)
                     DataCollectionWorker.schedulePeriodicWork(application)

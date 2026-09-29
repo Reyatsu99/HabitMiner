@@ -42,6 +42,9 @@ class ContextRepository
 
         suspend fun getLastInsertedUsageTimestamp(): Long? = appUsageDao.getLastInsertedTimestamp()
 
+        suspend fun getLastUsedNonLauncherPackage(launcherPackages: List<String>): String? =
+            appUsageDao.getLastUsedNonLauncherPackage(launcherPackages)
+
         suspend fun getSnapshotRevision(): String = contextDao.getSnapshotRevision()
 
         suspend fun insertSnapshot(snapshot: ContextSnapshotEntity) = contextDao.insert(snapshot)

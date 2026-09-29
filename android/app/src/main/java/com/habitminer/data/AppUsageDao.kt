@@ -75,4 +75,7 @@ interface AppUsageDao {
 
     @Query("SELECT MAX(endTime) FROM app_usage")
     suspend fun getLastInsertedTimestamp(): Long?
+
+    @Query("SELECT packageName FROM app_usage WHERE packageName NOT IN (:launcherPackages) ORDER BY startTime DESC LIMIT 1")
+    suspend fun getLastUsedNonLauncherPackage(launcherPackages: List<String>): String?
 }

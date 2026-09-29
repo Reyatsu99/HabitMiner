@@ -110,7 +110,10 @@ class UsageDataCollector
             }
         }
 
-        suspend fun collectUsageSince(sinceMs: Long): List<AppUsageEntity> {
+        suspend fun collectUsageSince(
+            sinceMs: Long,
+            prevStoredPackage: String? = null,
+        ): List<AppUsageEntity> {
             val endMs = System.currentTimeMillis()
             val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             // Re-read a short overlap so a session already in progress at the previous
@@ -206,7 +209,7 @@ class UsageDataCollector
             }
 
             result.sortBy { it.startTime }
-            var prevPkg: String? = null
+            var prevPkg: String? = prevStoredPackage
             for (i in result.indices) {
                 val current = result[i]
                 result[i] = current.copy(previousPackageName = prevPkg)
