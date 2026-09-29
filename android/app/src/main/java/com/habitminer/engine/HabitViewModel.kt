@@ -195,6 +195,9 @@ class HabitViewModel
                             )
                         }
                     }
+
+                    // Trigger immediate collection for fresh sensor context
+                    DataCollectionWorker.runOnce(application)
                 } catch (error: Exception) {
                     android.util.Log.e("HabitMiner", "Could not sync usage or update the model", error)
                 } finally {

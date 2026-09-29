@@ -48,7 +48,7 @@ class SensorContextCollector
         }
 
         private suspend fun collectLightLevel(): Float? =
-            withTimeoutOrNull(1000L) {
+            withTimeoutOrNull(2000L) {
                 suspendCancellableCoroutine { continuation ->
                     val lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
                     if (lightSensor == null) {
@@ -85,7 +85,7 @@ class SensorContextCollector
             }
 
         private suspend fun collectMotionState(): String? =
-            withTimeoutOrNull(1000L) {
+            withTimeoutOrNull(2000L) {
                 suspendCancellableCoroutine { continuation ->
                     val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
                     if (accelSensor == null) {
@@ -133,7 +133,7 @@ class SensorContextCollector
                             ) {}
                         }
 
-                    val registered = sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_NORMAL)
+                    val registered = sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_GAME)
                     if (!registered) {
                         continuation.resume(null)
                         return@suspendCancellableCoroutine
