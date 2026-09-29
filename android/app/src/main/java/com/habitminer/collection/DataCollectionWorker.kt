@@ -81,6 +81,8 @@ class DataCollectionWorker
                         isScreenOn = isScreenOn,
                         notificationCount = notifCount,
                         collectSensors = shouldSampleSensors,
+                        batteryLevel = batteryLevel,
+                        isCharging = batteryManager.isCharging,
                     )
 
                 contextDao.insert(snapshot)

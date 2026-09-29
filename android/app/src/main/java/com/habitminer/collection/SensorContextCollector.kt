@@ -29,6 +29,8 @@ class SensorContextCollector
             isScreenOn: Boolean,
             notificationCount: Int,
             collectSensors: Boolean,
+            batteryLevel: Int,
+            isCharging: Boolean,
         ): ContextSnapshotEntity {
             val timestamp = System.currentTimeMillis()
 
@@ -40,9 +42,8 @@ class SensorContextCollector
                 timestamp = timestamp,
                 motionState = motionState,
                 lightLevel = lightLevel,
-                // Battery handled in Worker
-                batteryLevel = -1,
-                isCharging = false,
+                batteryLevel = batteryLevel,
+                isCharging = isCharging,
                 isScreenOn = isScreenOn,
                 unlockCount = unlockCount,
                 notificationCount = notificationCount,
