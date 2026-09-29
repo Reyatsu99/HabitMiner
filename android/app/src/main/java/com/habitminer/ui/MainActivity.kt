@@ -162,7 +162,16 @@ class MainActivity : ComponentActivity() {
                                 composable(Screen.Home.route) { HomeScreen(state, viewModel) }
                                 composable(Screen.Habits.route) { HabitsScreen(state) }
                                 composable(Screen.Insights.route) { InsightsScreen(state) }
-                                composable(Screen.Settings.route) { SettingsScreen(state, viewModel) }
+                                composable(Screen.Settings.route) {
+                                    SettingsScreen(
+                                        state = state,
+                                        viewModel = viewModel,
+                                        onNavigateToDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
+                                    )
+                                }
+                                composable(Screen.Diagnostics.route) {
+                                    DiagnosticScreen(onBack = { navController.popBackStack() })
+                                }
                             }
                         }
                     }

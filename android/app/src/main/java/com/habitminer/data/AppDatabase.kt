@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DeviationEntity::class,
         DeviceEventEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                         AppDatabase::class.java,
                         "habitminer_database",
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                         .build()
                 instance = newInstance
                 newInstance
@@ -147,6 +147,20 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                     database.execSQL("DROP TABLE baseline")
                     database.execSQL("ALTER TABLE baseline_new RENAME TO baseline")
+                }
+            }
+
+        private val MIGRATION_4_5 =
+            object : Migration(4, 5) {
+                override fun migrate(database: SupportSQLiteDatabase) {
+                    database.execSQL("ALTER TABLE context_snapshots ADD COLUMN gyroMean REAL NOT NULL DEFAULT -1.0")
+                    database.execSQL("ALTER TABLE context_snapshots ADD COLUMN gyroVariance REAL NOT NULL DEFAULT -1.0")
+                    database.execSQL("ALTER TABLE context_snapshots ADD COLUMN gyroStd REAL NOT NULL DEFAULT -1.0")
+                    database.execSQL("ALTER TABLE context_snapshots ADD COLUMN gyroMin REAL NOT NULL DEFAULT -1.0")
+                    database.execSQL("ALTER TABLE context_snapshots ADD COLUMN gyroMax REAL NOT NULL DEFAULT -1.0")
+                    database.execSQL("ALTER TABLE context_snapshots ADD COLUMN gyroEnergy REAL NOT NULL DEFAULT -1.0")
+                    database.execSQL("ALTER TABLE context_snapshots ADD COLUMN proximityNear INTEGER DEFAULT NULL")
+                    database.execSQL("ALTER TABLE context_snapshots ADD COLUMN stepsSinceLastSnapshot INTEGER NOT NULL DEFAULT -1")
                 }
             }
     }

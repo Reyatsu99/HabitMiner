@@ -34,6 +34,7 @@ import com.habitminer.engine.HabitViewModel
 fun SettingsScreen(
     state: HabitUiState,
     viewModel: HabitViewModel,
+    onNavigateToDiagnostics: () -> Unit = {},
 ) {
     var confirmClearData by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
@@ -81,6 +82,29 @@ fun SettingsScreen(
                 }
                 TextButton(onClick = { confirmClearData = true }) {
                     Text("Clear collected data", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "View active hardware sensors on this device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                )
+                TextButton(onClick = onNavigateToDiagnostics) {
+                    Text("Hardware Sensor Diagnostics")
                 }
             }
         }
