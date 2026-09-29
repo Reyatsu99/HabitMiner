@@ -66,6 +66,9 @@ data class HabitUiState(
     val hasNotificationPermission: Boolean = false,
     val hasRuntimePermissions: Boolean = false,
     val expectedScreenTimeMs: Long = 0L,
+    val exportMessage: String? = null,
+    val usageRecordCount: Int = 0,
+    val contextRecordCount: Int = 0,
 )
 
 @OptIn(FlowPreview::class)
@@ -82,6 +85,7 @@ class HabitViewModel
         private val deviationDetector: DeviationDetector,
         private val usageDataCollector: UsageDataCollector,
         private val appIdentityResolver: AppIdentityResolver,
+        private val exportManager: com.habitminer.data.ExportManager,
     ) : AndroidViewModel(application) {
         private val _uiState = MutableStateFlow(HabitUiState())
         val uiState: StateFlow<HabitUiState> = _uiState.asStateFlow()
@@ -244,6 +248,22 @@ class HabitViewModel
             }
         }
 
+        fun exportDataToCsv() {
+            viewModelScope.launch(Dispatchers.IO) {
+                _uiState.update { it.copy(exportMessage = "Exporting data...") }
+                val path = exportManager.exportDataToCsv()
+                if (path != null) {
+                    _uiState.update { it.copy(exportMessage = "Exported to $path") }
+                } else {
+                    _uiState.update { it.copy(exportMessage = "Export failed. Please try again.") }
+                }
+            }
+        }
+
+        fun clearExportMessage() {
+            _uiState.update { it.copy(exportMessage = null) }
+        }
+
         private suspend fun refreshHabits() {
             val startOfDay = getStartOfDay()
             val allUsage = contextRepository.getAllUsage().first()
@@ -395,6 +415,18 @@ class HabitViewModel
                     contextRepository.getAllUsage().debounce(300).collect { usage ->
                         val days = withContext(Dispatchers.Default) { baselineBuilder.getDaysOfData(usage) }
                         _uiState.update { it.copy(daysOfData = days) }
+                    }
+                }
+
+                launch {
+                    contextRepository.getUsageCountFlow().collect { count ->
+                        _uiState.update { it.copy(usageRecordCount = count) }
+                    }
+                }
+
+                launch {
+                    contextRepository.getSnapshotCountFlow().collect { count ->
+                        _uiState.update { it.copy(contextRecordCount = count) }
                     }
                 }
             }

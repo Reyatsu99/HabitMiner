@@ -14,6 +14,7 @@ import androidx.work.WorkerParameters
 import com.habitminer.data.AppUsageDao
 import com.habitminer.data.ContextDao
 import com.habitminer.data.DeviceEventDao
+import com.habitminer.domain.AppIdentityResolver
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.Calendar
@@ -30,6 +31,7 @@ class DataCollectionWorker
         private val eventDao: DeviceEventDao,
         private val usageCollector: UsageDataCollector,
         private val sensorCollector: SensorContextCollector,
+        private val appIdentityResolver: AppIdentityResolver,
     ) : CoroutineWorker(appContext, workerParams) {
         override suspend fun doWork(): Result {
             return try {
@@ -47,7 +49,9 @@ class DataCollectionWorker
                 val lastTimestamp =
                     usageDao.getLastInsertedTimestamp()
                         ?: (System.currentTimeMillis() - TimeUnit.DAYS.toMillis(14))
-                val newUsage = usageCollector.collectUsageSince(lastTimestamp)
+
+                val prevPkg = usageDao.getLastUsedNonLauncherPackage(appIdentityResolver.getLauncherPackages())
+                val newUsage = usageCollector.collectUsageSince(lastTimestamp, prevPkg)
                 if (newUsage.isNotEmpty()) {
                     usageDao.insertAll(newUsage)
                 }

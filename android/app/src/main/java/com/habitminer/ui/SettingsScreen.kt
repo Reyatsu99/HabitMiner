@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -82,6 +83,24 @@ fun SettingsScreen(
                 }
                 TextButton(onClick = { confirmClearData = true }) {
                     Text("Clear collected data", color = MaterialTheme.colorScheme.error)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = { viewModel.exportDataToCsv() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Export Data to CSV")
+                }
+
+                if (state.exportMessage != null) {
+                    Text(
+                        text = state.exportMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
             }
         }

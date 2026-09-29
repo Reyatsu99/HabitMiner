@@ -170,7 +170,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                                 composable(Screen.Diagnostics.route) {
-                                    DiagnosticScreen(onBack = { navController.popBackStack() })
+                                    DiagnosticScreen(state = state, onBack = { navController.popBackStack() })
                                 }
                             }
                         }

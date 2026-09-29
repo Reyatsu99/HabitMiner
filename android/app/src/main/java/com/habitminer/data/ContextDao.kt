@@ -23,6 +23,12 @@ interface ContextDao {
     @Query("SELECT * FROM context_snapshots WHERE timestamp >= :sinceMs ORDER BY timestamp ASC")
     suspend fun getSnapshotsSince(sinceMs: Long): List<ContextSnapshotEntity>
 
+    @Query("SELECT * FROM context_snapshots ORDER BY timestamp DESC")
+    fun getAllSnapshots(): Flow<List<ContextSnapshotEntity>>
+
+    @Query("SELECT COUNT(*) FROM context_snapshots")
+    fun getSnapshotCount(): Flow<Int>
+
     @Query(
         "SELECT COALESCE(" +
             "date(MAX(timestamp) / 1000, 'unixepoch', 'localtime') || ':' || " +

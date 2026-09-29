@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.habitminer.engine.HabitUiState
 
 data class SensorInfo(
     val name: String,
@@ -46,7 +47,10 @@ data class SensorInfo(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DiagnosticScreen(onBack: () -> Unit) {
+fun DiagnosticScreen(
+    state: HabitUiState,
+    onBack: () -> Unit,
+) {
     val context = LocalContext.current
     val sensorManager = remember { context.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
 
@@ -120,10 +124,45 @@ fun DiagnosticScreen(onBack: () -> Unit) {
         ) {
             item {
                 Text(
-                    text = "Hardware Analysis",
+                    text = "Data Quality",
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
                     modifier = Modifier.padding(vertical = 16.dp),
+                )
+
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(12.dp),
+                            )
+                            .padding(16.dp),
+                ) {
+                    Column {
+                        Text(
+                            "App Usage Records: ${state.usageRecordCount}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            "Context Snapshots: ${state.contextRecordCount}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text("Total Days Monitored: ${state.daysOfData}", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = "Hardware Analysis",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    modifier = Modifier.padding(bottom = 16.dp),
                 )
             }
 

@@ -40,6 +40,10 @@ class ContextRepository
 
         suspend fun getUsageCount(): Int = appUsageDao.getUsageCount().first()
 
+        fun getUsageCountFlow(): Flow<Int> = appUsageDao.getUsageCount()
+
+        fun getSnapshotCountFlow(): Flow<Int> = contextDao.getSnapshotCount()
+
         suspend fun getLastInsertedUsageTimestamp(): Long? = appUsageDao.getLastInsertedTimestamp()
 
         suspend fun getLastUsedNonLauncherPackage(launcherPackages: List<String>): String? =
