@@ -1,103 +1,100 @@
 import numpy as np
-import pandas as pd
-from typing import List, Tuple, Dict, Any
+from typing import List, Dict, Tuple
 
 class TimeConditionedMarkovModel:
-    """
-    Time-Conditioned First-Order Markov Model.
-    Predicts the next semantic POI given the current POI and Time-of-Day slot.
-    """
-    def __init__(self, num_clusters: int, alpha: float = 0.1):
-        """
-        Args:
-            num_clusters (int): The total number of unique valid POIs (K).
-            alpha (float): Laplace smoothing parameter to handle unseen transitions.
-        """
-        self.K = num_clusters
-        self.alpha = alpha
+    def __init__(self):
+        # time_bin -> (state -> (next_state -> prob))
+        self.transitions: Dict[str, Dict[str, Dict[str, float]]] = {}
+        # time_bin -> (state -> count)
+        self.state_counts: Dict[str, Dict[str, int]] = {}
+        # all seen states
+        self.vocab = set()
         
-        # 4 Time slots: Morning(0), Afternoon(1), Evening(2), Night(3)
-        self.num_time_slots = 4
-        
-        # Transition Tensor: [time_slot, current_state, next_state]
-        # Shape: (4, K, K)
-        self.transition_counts = np.zeros((self.num_time_slots, self.K, self.K))
-        self.transition_probs = np.zeros((self.num_time_slots, self.K, self.K))
-        
-    @staticmethod
-    def get_time_slot(timestamp: int) -> int:
+    def fit(self, sequences: Dict[str, List[List[str]]]):
         """
-        Maps a UTC timestamp to a local time slot (0-3).
-        Assumption: using UTC hour for simplicity, in a real app convert to local tz.
-        Morning (06:00-11:59): 0
-        Afternoon (12:00-16:59): 1
-        Evening (17:00-20:59): 2
-        Night (21:00-05:59): 3
+        Sequences dict key: "user_id|day_type|time_slot"
         """
-        dt = pd.to_datetime(timestamp, unit='s')
-        hour = dt.hour
+        # First pass to build vocab and raw counts
+        raw_transitions = {}
         
-        if 6 <= hour < 12:
-            return 0
-        elif 12 <= hour < 17:
-            return 1
-        elif 17 <= hour < 21:
-            return 2
-        else:
-            return 3
-
-    def fit(self, poi_sequence: List[Tuple[int, int]]):
-        """
-        Learns the transition probabilities from a sequence of visits.
-        Args:
-            poi_sequence: List of tuples (cluster_id, timestamp_of_visit)
-        """
-        # Filter out noise (-1)
-        clean_seq = [(cid, ts) for cid, ts in poi_sequence if cid != -1]
-        
-        for i in range(len(clean_seq) - 1):
-            curr_state = clean_seq[i][0]
-            next_state = clean_seq[i+1][0]
+        for key, daily_seqs in sequences.items():
+            _, day_type, time_slot = key.split("|")
+            time_bin = f"{day_type}_{time_slot}"
             
-            # The time slot context is based on the departure from curr_state
-            # or arrival at next_state. We'll use departure time (next_state's timestamp approx)
-            time_slot = self.get_time_slot(clean_seq[i+1][1])
-            
-            if curr_state < self.K and next_state < self.K:
-                self.transition_counts[time_slot, curr_state, next_state] += 1
+            if time_bin not in raw_transitions:
+                raw_transitions[time_bin] = {}
+                self.state_counts[time_bin] = {}
                 
-        self._calculate_probabilities()
+            for seq in daily_seqs:
+                for i in range(len(seq) - 1):
+                    s1 = seq[i]
+                    s2 = seq[i+1]
+                    self.vocab.add(s1)
+                    self.vocab.add(s2)
+                    
+                    if s1 not in raw_transitions[time_bin]:
+                        raw_transitions[time_bin][s1] = {}
+                        
+                    raw_transitions[time_bin][s1][s2] = raw_transitions[time_bin][s1].get(s2, 0) + 1
+                    self.state_counts[time_bin][s1] = self.state_counts[time_bin].get(s1, 0) + 1
+                    
+        # Apply Laplace smoothing and convert to probabilities
+        vocab_size = len(self.vocab)
         
-    def _calculate_probabilities(self):
-        """Applies Laplace smoothing and normalizes the transition tensor."""
-        for t in range(self.num_time_slots):
-            for i in range(self.K):
-                # Count array for departing state i at time t
-                counts = self.transition_counts[t, i, :]
+        for time_bin, trans_counts in raw_transitions.items():
+            self.transitions[time_bin] = {}
+            for s1 in self.vocab:
+                self.transitions[time_bin][s1] = {}
                 
-                # Apply smoothing
-                smoothed_counts = counts + self.alpha
+                # Total count for s1 in this time_bin (with smoothing)
+                total_s1 = self.state_counts[time_bin].get(s1, 0) + vocab_size
                 
-                # Normalize
-                total = np.sum(smoothed_counts)
-                self.transition_probs[t, i, :] = smoothed_counts / total
-
-    def predict_next(self, current_poi: int, target_timestamp: int) -> np.ndarray:
-        """
-        Predicts the probability distribution of the next POI.
-        Args:
-            current_poi: The current cluster_id
-            target_timestamp: The time we are trying to predict the transition for
-        Returns:
-            np.ndarray of shape (K,) representing probabilities for each POI.
-        """
-        time_slot = self.get_time_slot(target_timestamp)
+                for s2 in self.vocab:
+                    # Count for s1->s2 (with smoothing)
+                    count_s1_s2 = trans_counts.get(s1, {}).get(s2, 0) + 1
+                    prob = count_s1_s2 / total_s1
+                    self.transitions[time_bin][s1][s2] = prob
+                    
+    def predict_next(self, current_state: str, day_type: str, time_slot: str, top_k: int = 1) -> List[Tuple[str, float]]:
+        time_bin = f"{day_type}_{time_slot}"
         
-        # If current_poi is unseen or noise, fallback to a uniform distribution
-        if current_poi == -1 or current_poi >= self.K:
-            return np.ones(self.K) / self.K
+        if time_bin not in self.transitions or current_state not in self.transitions[time_bin]:
+            # Fallback to uniform distribution over vocab if state not seen in this bin
+            if not self.vocab:
+                return []
+            prob = 1.0 / len(self.vocab)
+            preds = [(s, prob) for s in self.vocab]
+            return sorted(preds, key=lambda x: x[1], reverse=True)[:top_k]
             
-        return self.transition_probs[time_slot, current_poi, :]
+        probs = self.transitions[time_bin][current_state]
+        preds = [(k, v) for k, v in probs.items()]
+        return sorted(preds, key=lambda x: x[1], reverse=True)[:top_k]
 
-if __name__ == "__main__":
-    print("Markov Model module ready.")
+    def evaluate_predictions(self, test_sequences: Dict[str, List[List[str]]], top_k: int = 3) -> dict:
+        correct_top1 = 0
+        correct_topk = 0
+        total_predictions = 0
+        
+        for key, daily_seqs in test_sequences.items():
+            _, day_type, time_slot = key.split("|")
+            
+            for seq in daily_seqs:
+                for i in range(len(seq) - 1):
+                    s1 = seq[i]
+                    actual_next = seq[i+1]
+                    
+                    preds = self.predict_next(s1, day_type, time_slot, top_k=top_k)
+                    pred_states = [p[0] for p in preds]
+                    
+                    if pred_states:
+                        if actual_next == pred_states[0]:
+                            correct_top1 += 1
+                        if actual_next in pred_states:
+                            correct_topk += 1
+                    total_predictions += 1
+                    
+        return {
+            "top1_accuracy": correct_top1 / total_predictions if total_predictions > 0 else 0.0,
+            f"top{top_k}_accuracy": correct_topk / total_predictions if total_predictions > 0 else 0.0,
+            "total_samples": total_predictions
+        }

@@ -3,11 +3,13 @@ plugins {
     id 'org.jetbrains.kotlin.android'
     id 'org.jetbrains.kotlin.plugin.compose'
     id 'com.google.devtools.ksp'     // Kotlin Symbol Processing for Room
+    id 'com.google.dagger.hilt.android'
+    id 'com.diffplug.spotless'
 }
 
 android {
     namespace 'com.habitminer'
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         applicationId "com.habitminer"
@@ -22,6 +24,12 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.all {
+            systemProperty 'net.bytebuddy.experimental', 'true'
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true
@@ -30,12 +38,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
 
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = '21'
     }
 
     buildFeatures {
@@ -46,6 +54,13 @@ android {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
+    }
+}
+
+spotless {
+    kotlin {
+        target '**/*.kt'
+        ktlint()
     }
 }
 
@@ -81,19 +96,25 @@ dependencies {
     // ==================== WorkManager ====================
     implementation 'androidx.work:work-runtime-ktx:2.9.0'
 
-    // ==================== Location & Activity Recognition ====================
-    implementation 'com.google.android.gms:play-services-location:21.1.0'
+    // ==================== Data Serialization ====================
+    implementation 'com.google.code.gson:gson:2.10.1'
 
     // ==================== Coroutines ====================
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3'
 
     // ==================== Testing ====================
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:5.12.0'
+    testImplementation 'org.mockito.kotlin:mockito-kotlin:5.3.1'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
 
     // Room test helpers
     testImplementation "androidx.room:room-testing:$room_version"
+
+    // ==================== Dependency Injection ====================
+    implementation 'com.google.dagger:hilt-android:2.51.1'
+    ksp 'com.google.dagger:hilt-compiler:2.51.1'
+    implementation 'androidx.hilt:hilt-navigation-compose:1.2.0'
 }

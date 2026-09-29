@@ -3,37 +3,26 @@ package com.habitminer
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.os.Build
-import com.habitminer.service.LocationTrackingService
+import android.content.Context
+import dagger.hilt.android.HiltAndroidApp
 
-/**
- * Application class — initialises global singletons on startup.
- * Declared in AndroidManifest via android:name=".HabitMinerApp"
- */
+@HiltAndroidApp
 class HabitMinerApp : Application() {
-
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannels()
+        createNotificationChannel()
     }
 
-    /**
-     * Creates all notification channels required by the app.
-     * Must be called before starting any ForegroundService.
-     * On API < 26 channels don't exist but the call is safe.
-     */
-    private fun createNotificationChannels() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val locationChannel = NotificationChannel(
-                LocationTrackingService.CHANNEL_ID,
-                "Location Tracking",
-                NotificationManager.IMPORTANCE_LOW // Low = no sound, shown in status bar only
-            ).apply {
-                description = "Persistent notification for background GPS collection. HabitMiner never transmits your data to the cloud."
+    private fun createNotificationChannel() {
+        val name = "Habit Deviation Alerts"
+        val descriptionText = "Notifications for habit deviations"
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val channel =
+            NotificationChannel("habit_deviations", name, importance).apply {
+                description = descriptionText
             }
-
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(locationChannel)
-        }
+        val notificationManager: NotificationManager =
+            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
     }
 }

@@ -4,38 +4,45 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [RawGpsEntity::class], version = 2, exportSchema = false)
+@Database(
+    entities = [
+        AppUsageEntity::class,
+        ContextSnapshotEntity::class,
+        DiscoveredHabitEntity::class,
+        BaselineEntity::class,
+        DeviationEntity::class,
+    ],
+    version = 1,
+    exportSchema = false,
+)
 abstract class AppDatabase : RoomDatabase() {
-    
-    abstract fun locationDao(): LocationDao
+    abstract fun appUsageDao(): AppUsageDao
+
+    abstract fun contextDao(): ContextDao
+
+    abstract fun habitDao(): HabitDao
+
+    abstract fun baselineDao(): BaselineDao
+
+    abstract fun deviationDao(): DeviationDao
 
     companion object {
         @Volatile
-        private var INSTANCE: AppDatabase? = null
-
-        val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE raw_gps ADD COLUMN audio_level REAL NOT NULL DEFAULT 0.0")
-                db.execSQL("ALTER TABLE raw_gps ADD COLUMN light_level REAL NOT NULL DEFAULT 0.0")
-                db.execSQL("ALTER TABLE raw_gps ADD COLUMN is_screen_on INTEGER NOT NULL DEFAULT 0")
-            }
-        }
+        private var instance: AppDatabase? = null
 
         fun getDatabase(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "habitminer_db"
-                )
-                .addMigrations(MIGRATION_1_2)
-                .fallbackToDestructiveMigrationOnDowngrade()
-                .build()
-                INSTANCE = instance
-                instance
+            return instance ?: synchronized(this) {
+                val newInstance =
+                    Room.databaseBuilder(
+                        context.applicationContext,
+                        AppDatabase::class.java,
+                        "habitminer_database",
+                    )
+                        .fallbackToDestructiveMigration()
+                        .build()
+                instance = newInstance
+                newInstance
             }
         }
     }

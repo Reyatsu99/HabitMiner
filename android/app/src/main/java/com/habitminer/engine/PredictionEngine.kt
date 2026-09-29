@@ -1,107 +1,77 @@
 package com.habitminer.engine
 
-import java.util.Calendar
+import com.habitminer.data.AppUsageEntity
+import com.habitminer.domain.AppIdentityResolver
+import javax.inject.Inject
+import javax.inject.Singleton
 
-data class Prediction(
-    val label: String,       // e.g. "POI_0 (Home)"
-    val confidence: Int,     // 0-100
-    val timeSlot: String,    // "Morning", "Afternoon", "Evening", "Night"
-    val clusterId: Int
-)
+@Singleton
+class PredictionEngine
+    @Inject
+    constructor(
+        private val appIdentityResolver: AppIdentityResolver,
+    ) {
+        data class Prediction(val appName: String, val confidence: Float, val reasoning: String)
 
-data class POISummary(
-    val clusterId: Int,
-    val label: String,
-    val visitCount: Int,
-    val totalDurationMin: Long,
-    val centroidLat: Double,
-    val centroidLon: Double
-)
+        fun buildTransitionMatrix(usage: List<AppUsageEntity>): Map<String, Map<String, Map<String, Int>>> {
+            val validUsage = usage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
+            val matrix = mutableMapOf<String, MutableMap<String, MutableMap<String, Int>>>()
 
-object PredictionEngine {
+            val grouped = validUsage.groupBy { "${it.dayType}_${it.timeSlot}" }
+            for ((bin, usages) in grouped) {
+                val binMatrix = mutableMapOf<String, MutableMap<String, Int>>()
+                val sorted = usages.sortedBy { it.startTime }
 
-    // Human-readable POI names (best-guess by visit time patterns)
-    private val poiNames = listOf("Home", "Work / College", "Gym", "Cafe", "Other Place 1", "Other Place 2")
+                for (i in 0 until sorted.size - 1) {
+                    val current = sorted[i].appName
+                    val next = sorted[i + 1].appName
 
-    fun getTimeSlot(): String {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        return when {
-            hour in 6..11  -> "Morning"
-            hour in 12..16 -> "Afternoon"
-            hour in 17..20 -> "Evening"
-            else           -> "Night"
-        }
-    }
-
-    /**
-     * Summarises discovered POIs from stay points with visit counts and centroids.
-     */
-    fun buildPOISummaries(labeledPoints: List<StayPoint>): List<POISummary> {
-        val grouped = labeledPoints.filter { it.clusterId >= 0 }.groupBy { it.clusterId }
-        return grouped.map { (id, points) ->
-            POISummary(
-                clusterId = id,
-                label = poiNames.getOrElse(id) { "Place $id" },
-                visitCount = points.size,
-                totalDurationMin = points.sumOf { it.durationSeconds } / 60,
-                centroidLat = points.map { it.lat }.average(),
-                centroidLon = points.map { it.lon }.average()
-            )
-        }.sortedByDescending { it.visitCount }
-    }
-
-    /**
-     * Predicts next most likely destination based on time of day and visit frequency.
-     * Simple heuristic: during certain time slots, rank POIs by visit frequency weighted by time match.
-     */
-    fun predict(summaries: List<POISummary>, currentClusterId: Int): Prediction? {
-        if (summaries.isEmpty()) return null
-
-        val timeSlot = getTimeSlot()
-
-        // Exclude current location from prediction
-        val candidates = summaries.filter { it.clusterId != currentClusterId }
-        if (candidates.isEmpty()) return summaries.firstOrNull()?.let {
-            Prediction(it.label, 70, timeSlot, it.clusterId)
-        }
-
-        // Time-slot heuristic: prefer home in evening/night, work in morning/afternoon
-        val scored = candidates.map { poi ->
-            val timeBonus = when (timeSlot) {
-                "Morning", "Afternoon" -> if (poi.label.contains("Work") || poi.label.contains("College")) 3 else 1
-                "Evening", "Night"     -> if (poi.label.contains("Home")) 3 else 1
-                else -> 1
+                    val currentMap = binMatrix.getOrPut(current) { mutableMapOf() }
+                    currentMap[next] = currentMap.getOrDefault(next, 0) + 1
+                }
+                matrix[bin] = binMatrix
             }
-            Pair(poi, poi.visitCount * timeBonus)
-        }.sortedByDescending { it.second }
-
-        val best = scored.first().first
-        val totalScore = scored.sumOf { it.second }.toDouble()
-        val confidence = ((scored.first().second / totalScore) * 100).toInt().coerceIn(40, 95)
-
-        return Prediction(
-            label = best.label,
-            confidence = confidence,
-            timeSlot = timeSlot,
-            clusterId = best.clusterId
-        )
-    }
-
-    /**
-     * Computes a predictability score 0-100 based on Shannon entropy of visit counts.
-     * Lower entropy = more predictable = higher score.
-     */
-    fun predictabilityScore(summaries: List<POISummary>): Int {
-        if (summaries.isEmpty()) return 0
-        val total = summaries.sumOf { it.visitCount }.toDouble()
-        if (total == 0.0) return 0
-
-        val entropy = summaries.fold(0.0) { acc, poi ->
-            val p = poi.visitCount / total
-            if (p > 0) acc - p * Math.log(p) / Math.log(2.0) else acc
+            return matrix
         }
-        val maxEntropy = Math.log(summaries.size.toDouble()) / Math.log(2.0)
-        val normalised = if (maxEntropy > 0) entropy / maxEntropy else 0.0
-        return ((1.0 - normalised) * 100).toInt().coerceIn(0, 100)
+
+        fun predict(
+            usage: List<AppUsageEntity>,
+            currentCategory: String,
+            timeSlot: String,
+            dayType: String,
+        ): List<Prediction> {
+            val validUsage = usage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
+            val bin = "${dayType}_$timeSlot"
+            val matrix = buildTransitionMatrix(validUsage)
+            val binMatrix = matrix[bin] ?: return emptyList()
+            val transitions = binMatrix[currentCategory]
+
+            if (transitions == null || transitions.isEmpty()) {
+                // fallback: most frequent in this bin
+                val counts =
+                    validUsage.filter { it.timeSlot == timeSlot && it.dayType == dayType }
+                        .groupingBy { it.appName }.eachCount()
+                val total = counts.values.sum()
+                return counts.map { (cat, count) ->
+                    Prediction(cat, count.toFloat() / total, "Frequent in this time slot")
+                }.sortedByDescending { it.confidence }.take(3)
+            }
+
+            val alpha = 0.1f // Laplace smoothing
+            val categories = transitions.keys.toList()
+            val totalTransitions = transitions.values.sum() + (categories.size * alpha)
+
+            return transitions.map { (cat, count) ->
+                val prob = (count + alpha) / totalTransitions
+                Prediction(cat, prob, "Based on your sequence history")
+            }.sortedByDescending { it.confidence }.take(3)
+        }
+
+        fun getNextPredictionText(predictions: List<Prediction>): String {
+            if (predictions.isEmpty()) return "Not enough data to predict"
+            val top = predictions.first()
+            val percent = (top.confidence * 100).toInt()
+
+            return "Based on your routine → ${top.appName} ($percent%)"
+        }
     }
-}

@@ -1,0 +1,221 @@
+package com.habitminer.collection
+
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
+import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.os.Build
+import com.habitminer.data.AppUsageEntity
+import com.habitminer.domain.AppIdentityResolver
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.Calendar
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class UsageDataCollector
+    @Inject
+    constructor(
+        @ApplicationContext private val context: Context,
+        private val appIdentityResolver: AppIdentityResolver,
+    ) {
+        private val appCategoryMap: Map<String, String> =
+            mapOf(
+                "com.instagram.android" to "SOCIAL",
+                "com.facebook.katana" to "SOCIAL",
+                "com.twitter.android" to "SOCIAL",
+                "com.whatsapp" to "COMMUNICATION",
+                "org.telegram.messenger" to "COMMUNICATION",
+                "com.snapchat.android" to "SOCIAL",
+                "com.google.android.youtube" to "ENTERTAINMENT",
+                "com.netflix.mediaclient" to "ENTERTAINMENT",
+                "com.spotify.music" to "ENTERTAINMENT",
+                "com.google.android.apps.maps" to "NAVIGATION",
+                "com.google.android.gm" to "PRODUCTIVITY",
+                "com.microsoft.launcher" to "PRODUCTIVITY",
+                "com.microsoft.teams" to "PRODUCTIVITY",
+                "com.slack" to "PRODUCTIVITY",
+                "com.notion.id" to "PRODUCTIVITY",
+                "com.google.android.apps.docs" to "PRODUCTIVITY",
+                "com.google.android.apps.sheets" to "PRODUCTIVITY",
+                "com.google.android.calendar" to "PRODUCTIVITY",
+                "com.amazon.mShop.android.shopping" to "SHOPPING",
+                "com.flipkart.android" to "SHOPPING",
+                "com.gamestar.perfectpiano" to "GAMING",
+                "com.supercell.clashofclans" to "GAMING",
+                "com.mojang.minecraftpe" to "GAMING",
+                "com.pubg.imobile" to "GAMING",
+                "com.reddit.frontpage" to "SOCIAL",
+                "com.linkedin.android" to "PRODUCTIVITY",
+                "com.google.android.keep" to "PRODUCTIVITY",
+                "com.microsoft.office.word" to "PRODUCTIVITY",
+                "com.microsoft.office.excel" to "PRODUCTIVITY",
+                "jp.naver.line.android" to "COMMUNICATION",
+                "com.viber.voip" to "COMMUNICATION",
+                "com.skype.raider" to "COMMUNICATION",
+                "com.zhiliaoapp.musically" to "ENTERTAINMENT",
+                "com.google.android.apps.tachyon" to "COMMUNICATION",
+                "com.duolingo" to "EDUCATION",
+                "org.khanacademy.android" to "EDUCATION",
+                "com.coursera.app" to "EDUCATION",
+                "com.amazon.kindle" to "EDUCATION",
+                "com.google.android.apps.podcasts" to "ENTERTAINMENT",
+                "com.amazon.music" to "ENTERTAINMENT",
+                "com.gaana" to "ENTERTAINMENT",
+                "com.jio.media.jiocinema" to "ENTERTAINMENT",
+                "com.hotstar" to "ENTERTAINMENT",
+                "com.google.android.apps.fitness" to "HEALTH",
+                "com.nike.plusgps" to "HEALTH",
+                "com.strava" to "HEALTH",
+                "com.ola.client" to "NAVIGATION",
+                "com.ubercab" to "NAVIGATION",
+                "com.google.android.dialer" to "COMMUNICATION",
+                "com.android.contacts" to "COMMUNICATION",
+            )
+
+        fun getTimeSlot(hourOfDay: Int): String {
+            return when (hourOfDay) {
+                in 6..11 -> "MORNING"
+                in 12..16 -> "AFTERNOON"
+                in 17..21 -> "EVENING"
+                else -> "NIGHT"
+            }
+        }
+
+        fun getDayType(dayOfWeek: Int): String {
+            return if (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY) {
+                "WEEKEND"
+            } else {
+                "WEEKDAY"
+            }
+        }
+
+        fun getCategoryForPackage(
+            context: Context,
+            packageName: String,
+        ): String {
+            appCategoryMap[packageName]?.let { return it }
+            return try {
+                val pm = context.packageManager
+                val info = pm.getApplicationInfo(packageName, 0)
+                when (info.category) {
+                    ApplicationInfo.CATEGORY_GAME -> "GAMING"
+                    ApplicationInfo.CATEGORY_AUDIO,
+                    ApplicationInfo.CATEGORY_VIDEO,
+                    -> "ENTERTAINMENT"
+                    ApplicationInfo.CATEGORY_SOCIAL -> "SOCIAL"
+                    ApplicationInfo.CATEGORY_PRODUCTIVITY -> "PRODUCTIVITY"
+                    else -> "OTHER"
+                }
+            } catch (e: PackageManager.NameNotFoundException) {
+                "OTHER"
+            }
+        }
+
+        suspend fun collectUsageSince(sinceMs: Long): List<AppUsageEntity> {
+            val endMs = System.currentTimeMillis()
+            val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+            // Re-read a short overlap so a session already in progress at the previous
+            // worker boundary has its RESUMED event available. Stable IDs below make
+            // overlapping reads idempotent in Room.
+            val queryStart = (sinceMs - 24 * 60 * 60 * 1000L).coerceAtLeast(0L)
+            val events = usageStatsManager.queryEvents(queryStart, endMs)
+
+            val result = mutableListOf<AppUsageEntity>()
+            val startTimes = mutableMapOf<String, Long>()
+
+            val event = UsageEvents.Event()
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                val pkg = event.packageName
+
+                // Exclude home/launcher packages from session tracking
+                if (appIdentityResolver.isLauncher(pkg)) {
+                    continue
+                }
+
+                val foregroundEvent =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        UsageEvents.Event.ACTIVITY_RESUMED
+                    } else {
+                        @Suppress("DEPRECATION")
+                        UsageEvents.Event.MOVE_TO_FOREGROUND
+                    }
+                val backgroundEvent =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        UsageEvents.Event.ACTIVITY_PAUSED
+                    } else {
+                        @Suppress("DEPRECATION")
+                        UsageEvents.Event.MOVE_TO_BACKGROUND
+                    }
+
+                if (event.eventType == foregroundEvent) {
+                    startTimes[pkg] = event.timeStamp
+                } else if (event.eventType == backgroundEvent ||
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && event.eventType == UsageEvents.Event.ACTIVITY_STOPPED)
+                ) {
+                    val start = startTimes.remove(pkg)
+                    if (start != null) {
+                        val duration = event.timeStamp - start
+                        if (duration > 2000) { // filter > 2000ms
+                            val cal = Calendar.getInstance().apply { timeInMillis = start }
+                            val hour = cal.get(Calendar.HOUR_OF_DAY)
+                            val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+
+                            result.add(
+                                AppUsageEntity(
+                                    id = stableSessionId(pkg, start),
+                                    packageName = pkg,
+                                    appName = appIdentityResolver.getAppName(pkg),
+                                    appCategory = getCategoryForPackage(context, pkg),
+                                    startTime = start,
+                                    endTime = event.timeStamp,
+                                    durationMs = duration,
+                                    timeSlot = getTimeSlot(hour),
+                                    dayType = getDayType(dayOfWeek),
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Include sessions still foregrounded when this collection ran. A later
+            // overlapping collection replaces this row with the longer duration.
+            for ((pkg, start) in startTimes) {
+                val duration = endMs - start
+                if (duration > 2000L) {
+                    val cal = Calendar.getInstance().apply { timeInMillis = start }
+                    result.add(
+                        AppUsageEntity(
+                            id = stableSessionId(pkg, start),
+                            packageName = pkg,
+                            appName = appIdentityResolver.getAppName(pkg),
+                            appCategory = getCategoryForPackage(context, pkg),
+                            startTime = start,
+                            endTime = endMs,
+                            durationMs = duration,
+                            timeSlot = getTimeSlot(cal.get(Calendar.HOUR_OF_DAY)),
+                            dayType = getDayType(cal.get(Calendar.DAY_OF_WEEK)),
+                        ),
+                    )
+                }
+            }
+            return result
+        }
+
+        private fun stableSessionId(
+            packageName: String,
+            startTime: Long,
+        ): Long =
+            "$packageName:$startTime".fold(0xcbf29ce484222325UL.toLong()) { hash, char ->
+                (hash xor char.code.toLong()) * 0x100000001b3L
+            }.let { if (it == 0L) 1L else it }
+
+        suspend fun collectLast14Days(): List<AppUsageEntity> {
+            val cal = Calendar.getInstance()
+            cal.add(Calendar.DAY_OF_YEAR, -14)
+            return collectUsageSince(cal.timeInMillis)
+        }
+    }

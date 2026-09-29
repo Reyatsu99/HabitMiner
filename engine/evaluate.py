@@ -1,111 +1,175 @@
-import numpy as np
 import pandas as pd
-from typing import Dict, Any, List, Tuple
-from parser import generate_synthetic_trajectory
-from stay_point import extract_stay_points
-from stdbscan import stdbscan_cluster
+import numpy as np
+from typing import Dict, List, Tuple
+from feature_extraction import extract_sequences, extract_time_bin_features
+from habit_discovery import mine_frequent_sequences, DiscoveredHabit
+from baseline_model import PersonalBaseline, build_baselines_for_all_users
+from deviation_detector import detect_deviations, inject_controlled_deviation
 from markov_model import TimeConditionedMarkovModel
-from routine_analytics import sequence_entropy, calculate_js_divergence
 
-def evaluate_pipeline(trajectory_df: pd.DataFrame, train_ratio: float = 0.70) -> Dict[str, Any]:
-    """
-    Evaluates the HabitMiner pipeline performance on a trajectory dataset.
-    Performs train/test split on stay point transitions and computes Top-1 / Top-3 accuracy.
-    """
-    # 1. Stay Point Extraction
-    stay_points = extract_stay_points(trajectory_df, D_th=200.0, T_th=900.0)
-    
-    if stay_points.empty:
-        return {
-            "status": "error",
-            "message": "No stay points detected in dataset."
-        }
+def split_data_chronologically(df: pd.DataFrame, train_ratio: float = 0.7) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    if df.empty:
+        return df, df
         
-    # 2. ST-DBSCAN Clustering
-    clustered_sp = stdbscan_cluster(stay_points, eps1=500.0, eps2=86400.0, min_pts=2)
+    df_sorted = df.sort_values(["user_id", "start_time"])
+    train_dfs = []
+    test_dfs = []
     
-    # Extract sequence of POI visits (cluster_id, timestamp)
-    visits: List[Tuple[int, int]] = []
-    for _, row in clustered_sp.iterrows():
-        visits.append((int(row["cluster_id"]), int(row["start_time"])))
+    for uid, group in df_sorted.groupby("user_id"):
+        split_idx = int(len(group) * train_ratio)
+        train_dfs.append(group.iloc[:split_idx])
+        test_dfs.append(group.iloc[split_idx:])
         
-    # Filter out noise points (-1) for accuracy metrics
-    valid_visits = [v for v in visits if v[0] != -1]
-    
-    if len(valid_visits) < 5:
-        return {
-            "total_stay_points": len(stay_points),
-            "num_clusters": len(set(sp for sp, _ in visits if sp != -1)),
-            "top1_accuracy": 0.82,  # Fallback benchmark for small sample
-            "top3_accuracy": 0.95,
-            "entropy": 0.45,
-            "sample_size": len(valid_visits)
-        }
+    return pd.concat(train_dfs), pd.concat(test_dfs)
+
+def experiment1_habit_discovery(usage_df: pd.DataFrame, user_id: str = None) -> dict:
+    """Experiment 1: Habit Discovery"""
+    if user_id:
+        usage_df = usage_df[usage_df["user_id"] == user_id]
         
-    # 3. Train / Test Split
-    split_idx = int(len(valid_visits) * train_ratio)
-    train_seq = valid_visits[:split_idx]
-    test_seq = valid_visits[split_idx:]
+    train_df, test_df = split_data_chronologically(usage_df)
     
-    unique_clusters = set(cid for cid, _ in valid_visits)
-    num_clusters = max(unique_clusters) + 1 if unique_clusters else 1
+    train_seqs = extract_sequences(train_df)
+    habits = mine_frequent_sequences(train_seqs, min_support=2, min_confidence=0.3)
     
-    # 4. Fit Markov Model
-    model = TimeConditionedMarkovModel(num_clusters=num_clusters, alpha=0.1)
-    model.fit(train_seq)
-    
-    # 5. Evaluate Accuracy on Test Set
-    top1_correct = 0
-    top3_correct = 0
-    total_predictions = 0
-    
-    for i in range(len(test_seq) - 1):
-        curr_poi, _ = test_seq[i]
-        actual_next, next_ts = test_seq[i+1]
+    if not habits:
+        return {"avg_confidence": 0.0, "pattern_count": 0, "avg_support": 0.0, "habits": []}
         
-        probs = model.predict_next(curr_poi, next_ts)
-        
-        # Rank predictions by probability
-        ranked_indices = np.argsort(probs)[::-1]
-        
-        if ranked_indices[0] == actual_next:
-            top1_correct += 1
-        if actual_next in ranked_indices[:min(3, len(ranked_indices))]:
-            top3_correct += 1
-            
-        total_predictions += 1
-        
-    top1_acc = (top1_correct / total_predictions) if total_predictions > 0 else 0.80
-    top3_acc = (top3_correct / total_predictions) if total_predictions > 0 else 0.95
-    
-    # 6. Analytics Metrics
-    visit_counts = np.array(list(pd.Series([cid for cid, _ in valid_visits]).value_counts()))
-    entropy_score = sequence_entropy(visit_counts)
+    avg_conf = np.mean([h.confidence for h in habits])
+    avg_supp = np.mean([h.support for h in habits])
     
     return {
-        "total_gps_points": len(trajectory_df),
-        "total_stay_points": len(stay_points),
-        "num_poi_clusters": num_clusters,
-        "train_samples": len(train_seq),
-        "test_samples": len(test_seq),
-        "top1_accuracy": round(top1_acc * 100, 2),
-        "top3_accuracy": round(top3_acc * 100, 2),
-        "shannon_entropy": round(entropy_score, 3)
+        "avg_confidence": float(avg_conf),
+        "pattern_count": len(habits),
+        "avg_support": float(avg_supp),
+        "habits": habits
     }
 
-def print_evaluation_report(results: Dict[str, Any]):
-    print("=" * 60)
-    print("      HABITMINER SYSTEM EVALUATION REPORT")
-    print("=" * 60)
-    print(f" Total GPS Points Ingested : {results.get('total_gps_points', 'N/A')}")
-    print(f" Stay Points Mined        : {results.get('total_stay_points', 'N/A')}")
-    print(f" Unique POI Clusters      : {results.get('num_poi_clusters', 'N/A')}")
-    print(f" Top-1 Prediction Accuracy: {results.get('top1_accuracy')}%")
-    print(f" Top-3 Prediction Accuracy: {results.get('top3_accuracy')}%")
-    print(f" Routine Shannon Entropy  : {results.get('shannon_entropy')} bits")
-    print("=" * 60)
+def experiment2_next_behavior_prediction(usage_df: pd.DataFrame, user_id: str = None) -> dict:
+    """Experiment 2: Next-Behavior Prediction"""
+    if user_id:
+        usage_df = usage_df[usage_df["user_id"] == user_id]
+        
+    train_df, test_df = split_data_chronologically(usage_df)
+    
+    train_seqs = extract_sequences(train_df)
+    test_seqs = extract_sequences(test_df)
+    
+    markov = TimeConditionedMarkovModel()
+    markov.fit(train_seqs)
+    
+    markov_results = markov.evaluate_predictions(test_seqs, top_k=3)
+    
+    # Baseline: most frequent category overall
+    overall_most_freq = train_df["app_category"].mode()
+    baseline_pred = overall_most_freq.iloc[0] if not overall_most_freq.empty else "UNKNOWN"
+    
+    # Evaluate baseline
+    correct_top1 = 0
+    total = 0
+    for key, daily_seqs in test_seqs.items():
+        for seq in daily_seqs:
+            for i in range(len(seq) - 1):
+                actual = seq[i+1]
+                if actual == baseline_pred:
+                    correct_top1 += 1
+                total += 1
+                
+    baseline_top1 = correct_top1 / total if total > 0 else 0.0
+    
+    return {
+        "baseline_top1": baseline_top1,
+        "baseline_top3": baseline_top1, # baseline only predicts 1
+        "markov_top1": markov_results["top1_accuracy"],
+        "markov_top3": markov_results["top3_accuracy"]
+    }
 
-if __name__ == "__main__":
-    df = generate_synthetic_trajectory(num_days=7)
-    res = evaluate_pipeline(df)
-    print_evaluation_report(res)
+def experiment3_deviation_detection(usage_df: pd.DataFrame, user_id: str = None) -> dict:
+    """Experiment 3: Deviation Detection"""
+    if user_id:
+        usage_df = usage_df[usage_df["user_id"] == user_id]
+        
+    train_df, test_df = split_data_chronologically(usage_df)
+    
+    # Build baselines
+    train_features = extract_time_bin_features(train_df)
+    baselines = build_baselines_for_all_users(train_features)
+    
+    # Inject deviations into test set for user_1
+    target_user = user_id if user_id else "user_1"
+    
+    # We will inject a fake GAMING session in the NIGHT
+    anomalous_test_df = inject_controlled_deviation(
+        test_df, target_user, from_time_slot="EVENING", to_time_slot="NIGHT", category="GAMING"
+    )
+    
+    # Ensure there's a difference
+    clean_test_features = extract_time_bin_features(test_df)
+    anomalous_test_features = extract_time_bin_features(anomalous_test_df)
+    
+    baseline = baselines.get(target_user)
+    if not baseline:
+        return {"precision": 0, "recall": 0, "f1": 0, "false_positive_rate": 0}
+        
+    # Detect on clean (expect 0)
+    clean_devs = detect_deviations(clean_test_features, baseline)
+    fp = len(clean_devs)
+    
+    # Detect on anomalous (expect > 0)
+    anom_devs = detect_deviations(anomalous_test_features, baseline)
+    
+    # Let's say tp is deviations involving GAMING at NIGHT
+    tp = sum(1 for d in anom_devs if d.affected_category == "GAMING" and "NIGHT" in d.time_bin)
+    fn = 1 if tp == 0 else 0  # Assuming we injected 1 coherent anomaly
+    
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    
+    return {
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "false_positive_rate": fp / len(clean_test_features) if not clean_test_features.empty else 0.0,
+        "true_positives": tp,
+        "false_positives": fp,
+        "false_negatives": fn
+    }
+
+def run_all_experiments(usage_df: pd.DataFrame) -> dict:
+    """Run all 3 experiments"""
+    return {
+        "exp1": experiment1_habit_discovery(usage_df),
+        "exp2": experiment2_next_behavior_prediction(usage_df),
+        "exp3": experiment3_deviation_detection(usage_df)
+    }
+
+def print_evaluation_report(results: dict) -> None:
+    """Print formatted ASCII report"""
+    print("=" * 60)
+    print(" HABITMINER EVALUATION REPORT ".center(60, "="))
+    print("=" * 60)
+    
+    print("\n--- EXPERIMENT 1: HABIT DISCOVERY ---")
+    e1 = results["exp1"]
+    print(f"Patterns Found:   {e1['pattern_count']}")
+    print(f"Avg Confidence:   {e1['avg_confidence']:.2f}")
+    print(f"Avg Support:      {e1['avg_support']:.1f} days")
+    
+    print("\nTop 3 Habits:")
+    for i, h in enumerate(e1["habits"][:3]):
+        print(f"  {i+1}. {h.habit_name} ({h.pattern_str}) - Conf: {h.confidence:.2f}")
+        
+    print("\n--- EXPERIMENT 2: NEXT-BEHAVIOR PREDICTION ---")
+    e2 = results["exp2"]
+    print(f"Baseline Top-1:   {e2['baseline_top1']:.2%}")
+    print(f"Markov Top-1:     {e2['markov_top1']:.2%}")
+    print(f"Markov Top-3:     {e2['markov_top3']:.2%}")
+    
+    print("\n--- EXPERIMENT 3: DEVIATION DETECTION ---")
+    e3 = results["exp3"]
+    print(f"Precision:        {e3['precision']:.2f}")
+    print(f"Recall:           {e3['recall']:.2f}")
+    print(f"F1 Score:         {e3['f1']:.2f}")
+    print(f"FPR:              {e3['false_positive_rate']:.4f}")
+    print("=" * 60)
