@@ -332,12 +332,12 @@ fun DailySummaryGrid(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Card(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier.fillMaxWidth().height(88.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(20.dp),
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(16.dp).fillMaxSize(),
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
@@ -356,12 +356,12 @@ fun DailySummaryGrid(
             }
 
             Card(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier.fillMaxWidth().height(88.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(20.dp),
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(16.dp).fillMaxSize(),
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
@@ -376,6 +376,7 @@ fun DailySummaryGrid(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                 }
             }

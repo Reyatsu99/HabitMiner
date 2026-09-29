@@ -24,9 +24,11 @@ interface ContextDao {
     suspend fun getSnapshotsSince(sinceMs: Long): List<ContextSnapshotEntity>
 
     @Query(
-        "SELECT COALESCE(date(MAX(timestamp) / 1000, 'unixepoch', 'localtime'), '') || ':' || " +
-            "CAST(CAST(strftime('%H', MAX(timestamp) / 1000, 'unixepoch', 'localtime') AS INTEGER) / 6 AS TEXT) " +
-            "FROM context_snapshots",
+        "SELECT COALESCE(" +
+            "date(MAX(timestamp) / 1000, 'unixepoch', 'localtime') || ':' || " +
+            "CAST(CAST(strftime('%H', MAX(timestamp) / 1000, 'unixepoch', 'localtime') AS INTEGER) / 6 AS TEXT), " +
+            "''" +
+            ") FROM context_snapshots",
     )
     suspend fun getSnapshotRevision(): String
 

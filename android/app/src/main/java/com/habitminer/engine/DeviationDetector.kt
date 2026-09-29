@@ -86,9 +86,9 @@ class DeviationDetector
                                 timeBin = bin,
                                 deviationType = "EXCESS_DURATION",
                                 description =
-                                    "$cat was used for ${formatDuration(todayDuration)} " +
+                                    "Your total screen time was ${formatDuration(todayDuration)} " +
                                         "in the $timeSlot, versus your usual " +
-                                        "${formatDuration(expectedDuration)} by now.",
+                                        "${formatDuration(expectedDuration)} by now. The top app was $cat.",
                                 zScore = zScore,
                                 normalizedScore = norm,
                                 affectedCategory = cat,
@@ -99,7 +99,10 @@ class DeviationDetector
 
                 // 2. Check for new behavior (categories)
                 val todayCategories = usages.groupBy { it.appName }.mapValues { it.value.sumOf { u -> u.durationMs } }
-                val baseCategories: Map<String, Long> = gson.fromJson(base.typicalCategoriesJson, type)
+                val baseCategories: Map<String, Long> =
+                    runCatching {
+                        gson.fromJson<Map<String, Long>>(base.typicalCategoriesJson, type)
+                    }.getOrNull() ?: emptyMap()
 
                 for ((cat, duration) in todayCategories) {
                     if (duration > 5 * 60 * 1000 && !baseCategories.containsKey(cat)) {

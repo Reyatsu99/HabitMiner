@@ -43,27 +43,39 @@ class HabitEngine
                 val totalDays = groupedByDate.size
                 if (totalDays < 3) continue // need at least 3 days for a pattern
 
-                // Get sequence of usage items per day
-                val sequencesPerDay =
-                    groupedByDate.values.map { dayUsages ->
-                        dayUsages.sortedBy { it.startTime }.map { UsageItem(it.packageName, it.appName) }
-                    }
-
                 // Extract n-grams (size 2 and 3)
                 val patternCounts = mutableMapOf<List<UsageItem>, Int>()
 
-                for (seq in sequencesPerDay) {
-                    // simple deduplication of adjacent identical apps
-                    val cleanSeq = seq.filterIndexed { index, item -> index == 0 || item.packageName != seq[index - 1].packageName }
-
+                for (dayUsages in groupedByDate.values) {
+                    val sorted = dayUsages.sortedBy { it.startTime }
                     val seenToday = mutableSetOf<List<UsageItem>>()
 
                     for (size in 2..3) {
-                        if (cleanSeq.size < size) continue
-                        for (i in 0..cleanSeq.size - size) {
-                            val pattern = cleanSeq.subList(i, i + size)
-                            if (seenToday.add(pattern)) {
-                                patternCounts[pattern] = patternCounts.getOrDefault(pattern, 0) + 1
+                        if (sorted.size < size) continue
+                        for (i in 0..sorted.size - size) {
+                            // Check time gap between adjacent items in the pattern
+                            var isValidPattern = true
+                            for (j in 0 until size - 1) {
+                                val current = sorted[i + j]
+                                val next = sorted[i + j + 1]
+                                if (next.startTime - current.endTime > 15 * 60 * 1000L) {
+                                    isValidPattern = false
+                                    break
+                                }
+                            }
+                            if (isValidPattern) {
+                                val pattern = sorted.subList(i, i + size).map { UsageItem(it.packageName, it.appName) }
+                                // simple deduplication of adjacent identical apps
+                                val cleanPattern =
+                                    pattern.filterIndexed {
+                                            index,
+                                            item,
+                                        ->
+                                        index == 0 || item.packageName != pattern[index - 1].packageName
+                                    }
+                                if (cleanPattern.size >= 2 && seenToday.add(cleanPattern)) {
+                                    patternCounts[cleanPattern] = patternCounts.getOrDefault(cleanPattern, 0) + 1
+                                }
                             }
                         }
                     }

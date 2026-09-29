@@ -26,12 +26,18 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
@@ -283,41 +289,60 @@ class HabitViewModel
 
         private fun observeData() {
             viewModelScope.launch {
-                val startOfDay = getStartOfDay()
+                val startOfDayFlow =
+                    flow {
+                        while (currentCoroutineContext().isActive) {
+                            emit(getStartOfDay())
+                            // Calculate ms until next midnight
+                            val now = Calendar.getInstance()
+                            val nextMidnight =
+                                Calendar.getInstance().apply {
+                                    add(Calendar.DAY_OF_YEAR, 1)
+                                    set(Calendar.HOUR_OF_DAY, 0)
+                                    set(Calendar.MINUTE, 0)
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
+                                }
+                            val delayMs = nextMidnight.timeInMillis - now.timeInMillis
+                            delay(delayMs)
+                        }
+                    }.distinctUntilChanged()
 
                 launch {
-                    contextRepository.getTodayUsage(startOfDay).collect { usage ->
-                        val (validUsage, totalTime, categories) =
-                            withContext(Dispatchers.Default) {
-                                val valid = usage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
-                                val byApp =
-                                    valid.groupBy { appIdentityResolver.getAppName(it.packageName) }
-                                        .mapValues { entry -> entry.value.sumOf { item -> item.durationMs } }
-                                Triple(valid, valid.sumOf { it.durationMs }, byApp)
-                            }
-                        val topCategory = categories.maxByOrNull { it.value }?.key.orEmpty()
-
-                        _uiState.update {
-                            it.copy(
-                                todayScreenTimeMs = totalTime,
-                                todayUsageByApp = categories.toImmutableMap(),
-                                todayTopApp = topCategory,
-                            )
-                        }
-
-                        if (validUsage.isNotEmpty()) {
-                            val latest = validUsage.first()
-                            val allUsage = contextRepository.getAllUsage().first()
-                            val predictions =
+                    startOfDayFlow.collectLatest { startOfDay ->
+                        contextRepository.getTodayUsage(startOfDay).collect { usage ->
+                            val (validUsage, totalTime, categories) =
                                 withContext(Dispatchers.Default) {
-                                    predictionEngine.predict(
-                                        allUsage,
-                                        appIdentityResolver.getAppName(latest.packageName),
-                                        latest.timeSlot,
-                                        latest.dayType,
-                                    )
+                                    val valid = usage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
+                                    val byApp =
+                                        valid.groupBy { appIdentityResolver.getAppName(it.packageName) }
+                                            .mapValues { entry -> entry.value.sumOf { item -> item.durationMs } }
+                                    Triple(valid, valid.sumOf { it.durationMs }, byApp)
                                 }
-                            _uiState.update { it.copy(predictions = predictions.toImmutableList()) }
+                            val topCategory = categories.maxByOrNull { it.value }?.key.orEmpty()
+
+                            _uiState.update {
+                                it.copy(
+                                    todayScreenTimeMs = totalTime,
+                                    todayUsageByApp = categories.toImmutableMap(),
+                                    todayTopApp = topCategory,
+                                )
+                            }
+
+                            if (validUsage.isNotEmpty()) {
+                                val latest = validUsage.first()
+                                val allUsage = contextRepository.getAllUsage().first()
+                                val predictions =
+                                    withContext(Dispatchers.Default) {
+                                        predictionEngine.predict(
+                                            allUsage,
+                                            appIdentityResolver.getAppName(latest.packageName),
+                                            latest.timeSlot,
+                                            latest.dayType,
+                                        )
+                                    }
+                                _uiState.update { it.copy(predictions = predictions.toImmutableList()) }
+                            }
                         }
                     }
                 }
@@ -329,9 +354,11 @@ class HabitViewModel
                 }
 
                 launch {
-                    habitRepository.getTodayDeviations(startOfDay).collect { devs ->
-                        val overallScore = devs.maxOfOrNull { it.normalizedScore } ?: 0f
-                        _uiState.update { it.copy(todayDeviations = devs.toImmutableList(), overallDeviationScore = overallScore) }
+                    startOfDayFlow.collectLatest { startOfDay ->
+                        habitRepository.getTodayDeviations(startOfDay).collect { devs ->
+                            val overallScore = devs.maxOfOrNull { it.normalizedScore } ?: 0f
+                            _uiState.update { it.copy(todayDeviations = devs.toImmutableList(), overallDeviationScore = overallScore) }
+                        }
                     }
                 }
 

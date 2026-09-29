@@ -91,10 +91,7 @@ class UsageDataCollector
             }
         }
 
-        fun getCategoryForPackage(
-            context: Context,
-            packageName: String,
-        ): String {
+        private fun getCategoryForPackage(packageName: String): String {
             return try {
                 val pm = context.packageManager
                 val info = pm.getApplicationInfo(packageName, 0)
@@ -125,6 +122,28 @@ class UsageDataCollector
             val result = mutableListOf<AppUsageEntity>()
             val startTimes = mutableMapOf<String, Long>()
 
+            // Pre-compute event type constants outside the hot loop
+            val foregroundEvent =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    UsageEvents.Event.ACTIVITY_RESUMED
+                } else {
+                    @Suppress("DEPRECATION")
+                    UsageEvents.Event.MOVE_TO_FOREGROUND
+                }
+            val backgroundEvent =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    UsageEvents.Event.ACTIVITY_PAUSED
+                } else {
+                    @Suppress("DEPRECATION")
+                    UsageEvents.Event.MOVE_TO_BACKGROUND
+                }
+            val stoppedEvent =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    UsageEvents.Event.ACTIVITY_STOPPED
+                } else {
+                    -1
+                }
+
             val event = UsageEvents.Event()
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
@@ -135,26 +154,9 @@ class UsageDataCollector
                     continue
                 }
 
-                val foregroundEvent =
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        UsageEvents.Event.ACTIVITY_RESUMED
-                    } else {
-                        @Suppress("DEPRECATION")
-                        UsageEvents.Event.MOVE_TO_FOREGROUND
-                    }
-                val backgroundEvent =
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        UsageEvents.Event.ACTIVITY_PAUSED
-                    } else {
-                        @Suppress("DEPRECATION")
-                        UsageEvents.Event.MOVE_TO_BACKGROUND
-                    }
-
                 if (event.eventType == foregroundEvent) {
                     startTimes[pkg] = event.timeStamp
-                } else if (event.eventType == backgroundEvent ||
-                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && event.eventType == UsageEvents.Event.ACTIVITY_STOPPED)
-                ) {
+                } else if (event.eventType == backgroundEvent) {
                     val start = startTimes.remove(pkg)
                     if (start != null) {
                         val duration = event.timeStamp - start
@@ -168,7 +170,7 @@ class UsageDataCollector
                                     id = stableSessionId(pkg, start),
                                     packageName = pkg,
                                     appName = appIdentityResolver.getAppName(pkg),
-                                    appCategory = getCategoryForPackage(context, pkg),
+                                    appCategory = getCategoryForPackage(pkg),
                                     startTime = start,
                                     endTime = event.timeStamp,
                                     durationMs = duration,
@@ -192,7 +194,7 @@ class UsageDataCollector
                             id = stableSessionId(pkg, start),
                             packageName = pkg,
                             appName = appIdentityResolver.getAppName(pkg),
-                            appCategory = getCategoryForPackage(context, pkg),
+                            appCategory = getCategoryForPackage(pkg),
                             startTime = start,
                             endTime = endMs,
                             durationMs = duration,

@@ -150,7 +150,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding),
                         color = Color(0xFF0F172A),
                     ) {
-                        if (!state.hasUsagePermission || !state.hasRuntimePermissions) {
+                        if (!state.hasUsagePermission) {
                             PermissionScreen(
                                 hasUsage = state.hasUsagePermission,
                                 onRequestUsage = {

@@ -4,7 +4,7 @@
 -keep class com.habitminer.data.** { *; }
 
 # Keep WorkManager worker classes
--keep class com.habitminer.worker.** { *; }
+-keep class com.habitminer.collection.** { *; }
 
 # Keep Kotlin coroutines
 -keepclassmembernames class kotlinx.** {

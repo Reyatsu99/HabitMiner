@@ -23,28 +23,41 @@ class PredictionEngine
                 val sorted = usages.sortedBy { it.startTime }
 
                 for (i in 0 until sorted.size - 1) {
-                    val current = sorted[i].appName
-                    val next = sorted[i + 1].appName
+                    val current = sorted[i]
+                    val next = sorted[i + 1]
 
-                    val currentMap = binMatrix.getOrPut(current) { mutableMapOf() }
-                    currentMap[next] = currentMap.getOrDefault(next, 0) + 1
+                    // Enforce session proximity: only count transitions within 15 minutes
+                    if (next.startTime - current.endTime <= 15 * 60 * 1000L) {
+                        val currentMap = binMatrix.getOrPut(current.appName) { mutableMapOf() }
+                        currentMap[next.appName] = currentMap.getOrDefault(next.appName, 0) + 1
+                    }
                 }
                 matrix[bin] = binMatrix
             }
             return matrix
         }
 
+        private var cachedMatrix: Map<String, Map<String, Map<String, Int>>> = emptyMap()
+        private var lastUsageHash: Int = 0
+        private var vocabularySize: Int = 0
+
         fun predict(
             usage: List<AppUsageEntity>,
-            currentCategory: String,
+            currentApp: String,
             timeSlot: String,
             dayType: String,
         ): List<Prediction> {
             val validUsage = usage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
+            val currentHash = validUsage.hashCode()
+            if (currentHash != lastUsageHash) {
+                cachedMatrix = buildTransitionMatrix(validUsage)
+                vocabularySize = validUsage.map { it.appName }.distinct().size
+                lastUsageHash = currentHash
+            }
+
             val bin = "${dayType}_$timeSlot"
-            val matrix = buildTransitionMatrix(validUsage)
-            val binMatrix = matrix[bin] ?: return emptyList()
-            val transitions = binMatrix[currentCategory]
+            val binMatrix = cachedMatrix[bin] ?: return emptyList()
+            val transitions = binMatrix[currentApp]
 
             if (transitions == null || transitions.isEmpty()) {
                 // fallback: most frequent in this bin
@@ -58,8 +71,7 @@ class PredictionEngine
             }
 
             val alpha = 0.1f // Laplace smoothing
-            val categories = transitions.keys.toList()
-            val totalTransitions = transitions.values.sum() + (categories.size * alpha)
+            val totalTransitions = transitions.values.sum() + (vocabularySize * alpha)
 
             return transitions.map { (cat, count) ->
                 val prob = (count + alpha) / totalTransitions
