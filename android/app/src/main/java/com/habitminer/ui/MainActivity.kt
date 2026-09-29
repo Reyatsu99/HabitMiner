@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -118,6 +119,28 @@ class MainActivity : ComponentActivity() {
                                             indicatorColor = Color(0xFF0F172A),
                                         ),
                                 )
+                                NavigationBarItem(
+                                    icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                                    label = { Text("Settings") },
+                                    selected = currentRoute == Screen.Settings.route,
+                                    onClick = {
+                                        navController.navigate(Screen.Settings.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    colors =
+                                        NavigationBarItemDefaults.colors(
+                                            selectedIconColor = Color(0xFF38BDF8),
+                                            unselectedIconColor = Color.LightGray,
+                                            selectedTextColor = Color(0xFF38BDF8),
+                                            unselectedTextColor = Color.LightGray,
+                                            indicatorColor = Color(0xFF0F172A),
+                                        ),
+                                )
                             }
                         }
                     },
@@ -139,6 +162,7 @@ class MainActivity : ComponentActivity() {
                                 composable(Screen.Home.route) { HomeScreen(state, viewModel) }
                                 composable(Screen.Habits.route) { HabitsScreen(state) }
                                 composable(Screen.Insights.route) { InsightsScreen(state) }
+                                composable(Screen.Settings.route) { SettingsScreen(state, viewModel) }
                             }
                         }
                     }
