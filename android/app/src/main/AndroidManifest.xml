@@ -37,5 +37,13 @@
             </intent-filter>
         </service>
 
+        <receiver
+            android:name=".collection.DeviceEventReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>

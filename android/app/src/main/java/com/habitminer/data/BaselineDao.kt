@@ -19,4 +19,7 @@ interface BaselineDao {
 
     @Query("SELECT COUNT(*) FROM baseline")
     suspend fun getBaselineCount(): Int
+
+    @Query("DELETE FROM baseline")
+    suspend fun deleteAll()
 }

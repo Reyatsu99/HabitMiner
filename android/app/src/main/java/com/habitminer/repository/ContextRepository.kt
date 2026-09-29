@@ -4,6 +4,7 @@ import com.habitminer.data.AppUsageDao
 import com.habitminer.data.AppUsageEntity
 import com.habitminer.data.ContextDao
 import com.habitminer.data.ContextSnapshotEntity
+import com.habitminer.data.DeviceEventDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -15,6 +16,7 @@ class ContextRepository
     constructor(
         private val appUsageDao: AppUsageDao,
         private val contextDao: ContextDao,
+        private val deviceEventDao: DeviceEventDao,
     ) {
         fun getLatestSnapshot(): Flow<ContextSnapshotEntity?> = contextDao.getLatestSnapshot()
 
@@ -25,6 +27,9 @@ class ContextRepository
         suspend fun getSnapshotsSince(sinceMs: Long): List<ContextSnapshotEntity> = contextDao.getSnapshotsSince(sinceMs)
 
         suspend fun getUsageRevision(): String = appUsageDao.getUsageRevision()
+
+        suspend fun getModelRevision(beforeMs: Long): String =
+            "${appUsageDao.getModelRevision(beforeMs)}|${contextDao.getModelRevision(beforeMs)}"
 
         suspend fun getPackagesWithFallbackNames(): List<String> = appUsageDao.getPackagesWithPackageNameLabels()
 
@@ -41,4 +46,10 @@ class ContextRepository
         suspend fun insertAppUsage(usage: AppUsageEntity) = appUsageDao.insert(usage)
 
         suspend fun insertAllAppUsage(usages: List<AppUsageEntity>) = appUsageDao.insertAll(usages)
+
+        suspend fun clearCollectedData() {
+            appUsageDao.deleteAll()
+            contextDao.deleteAll()
+            deviceEventDao.deleteAll()
+        }
     }

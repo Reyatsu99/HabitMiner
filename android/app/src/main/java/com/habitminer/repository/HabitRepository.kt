@@ -44,4 +44,10 @@ class HabitRepository
         suspend fun insertDeviation(deviation: DeviationEntity) = deviationDao.insert(deviation)
 
         suspend fun deleteDeviationsSince(startOfDayMs: Long) = deviationDao.deleteSince(startOfDayMs)
+
+        suspend fun clearModelData() {
+            habitDao.deleteAll()
+            baselineDao.deleteAll()
+            deviationDao.deleteAll()
+        }
     }

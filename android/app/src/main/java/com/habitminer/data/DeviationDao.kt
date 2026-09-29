@@ -25,4 +25,7 @@ interface DeviationDao {
 
     @Query("DELETE FROM deviations WHERE timestamp >= :startOfDayMs")
     suspend fun deleteSince(startOfDayMs: Long)
+
+    @Query("DELETE FROM deviations")
+    suspend fun deleteAll()
 }

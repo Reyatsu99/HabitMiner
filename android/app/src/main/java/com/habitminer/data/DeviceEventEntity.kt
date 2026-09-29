@@ -1,0 +1,13 @@
+package com.habitminer.data
+
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "device_events", indices = [Index(value = ["timestamp"])])
+data class DeviceEventEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val eventType: String,
+    val packageName: String? = null,
+    val timestamp: Long = System.currentTimeMillis(),
+)

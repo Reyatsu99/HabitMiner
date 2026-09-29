@@ -19,6 +19,7 @@ class SensorContextCollector(private val context: Context) {
         unlockCount: Int,
         isScreenOn: Boolean,
         notificationCount: Int,
+        collectSensors: Boolean,
     ): ContextSnapshotEntity {
         val timestamp = System.currentTimeMillis()
 
@@ -27,8 +28,8 @@ class SensorContextCollector(private val context: Context) {
         val isCharging = batteryManager.isCharging
 
         // Keep unavailable sensor readings distinct from real darkness / stillness.
-        val lightLevel = collectLightLevel() ?: -1f
-        val motionState = collectMotionState() ?: "UNKNOWN"
+        val lightLevel = if (collectSensors) collectLightLevel() ?: -1f else -1f
+        val motionState = if (collectSensors) collectMotionState() ?: "UNKNOWN" else "UNKNOWN"
 
         return ContextSnapshotEntity(
             timestamp = timestamp,
@@ -43,7 +44,7 @@ class SensorContextCollector(private val context: Context) {
     }
 
     private suspend fun collectLightLevel(): Float? =
-        withTimeoutOrNull(5000L) {
+        withTimeoutOrNull(1000L) {
             suspendCancellableCoroutine { continuation ->
                 val lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
                 if (lightSensor == null) {
@@ -76,7 +77,7 @@ class SensorContextCollector(private val context: Context) {
         }
 
     private suspend fun collectMotionState(): String? =
-        withTimeoutOrNull(5000L) {
+        withTimeoutOrNull(1000L) {
             suspendCancellableCoroutine { continuation ->
                 val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
                 if (accelSensor == null) {
@@ -96,7 +97,7 @@ class SensorContextCollector(private val context: Context) {
                                 val magnitude = sqrt(x * x + y * y + z * z)
                                 samples.add(magnitude)
 
-                                if (samples.size >= 50) {
+                                if (samples.size >= 12) {
                                     sensorManager.unregisterListener(this)
                                     if (continuation.isActive) {
                                         val mean = samples.average().toFloat()
@@ -124,7 +125,7 @@ class SensorContextCollector(private val context: Context) {
                         ) {}
                     }
 
-                sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_UI)
+                sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_GAME)
                 continuation.invokeOnCancellation {
                     sensorManager.unregisterListener(listener)
                 }

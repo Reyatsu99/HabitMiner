@@ -27,11 +27,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
 import java.util.Calendar
 import javax.inject.Inject
 
 data class HabitUiState(
     val isLoading: Boolean = true,
+    val isSyncing: Boolean = false,
+    val retentionDays: Int = 90,
     val daysOfData: Int = 0,
     val todayScreenTimeMs: Long = 0L,
     val todayUnlocks: Int = 0,
@@ -68,6 +71,7 @@ class HabitViewModel
         private val _uiState = MutableStateFlow(HabitUiState())
         val uiState: StateFlow<HabitUiState> = _uiState.asStateFlow()
         private var initialCollectionStarted = false
+        private val syncMutex = Mutex()
 
         init {
             checkPermissions()
@@ -94,6 +98,10 @@ class HabitViewModel
                 }
             val hasUsage = mode == AppOpsManager.MODE_ALLOWED
             val hasNotif = HabitNotificationListener.isEnabled(application)
+            val retentionDays = application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
+                .getInt("retention_days", 90).coerceIn(30, 180)
+            val collectionEnabled = application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
+                .getBoolean("collection_enabled", true)
 
             _uiState.update {
                 it.copy(
@@ -102,10 +110,11 @@ class HabitViewModel
                     // Neither raw motion sensor access nor usage history requires a
                     // runtime permission. Notification access remains optional.
                     hasRuntimePermissions = true,
+                    retentionDays = retentionDays,
                 )
             }
 
-            if (hasUsage && !initialCollectionStarted) {
+            if (hasUsage && collectionEnabled && !initialCollectionStarted) {
                 initialCollectionStarted = true
                 synchronizeUsageAndModel()
             }
@@ -113,12 +122,16 @@ class HabitViewModel
 
         fun loadHistoricalData() {
             if (!_uiState.value.hasUsagePermission) return
+            val application = getApplication<Application>()
+            application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
+                .edit().putBoolean("collection_enabled", true).apply()
             synchronizeUsageAndModel()
         }
 
         private fun synchronizeUsageAndModel() {
             viewModelScope.launch(Dispatchers.IO) {
-                _uiState.update { it.copy(isLoading = true) }
+                if (!syncMutex.tryLock()) return@launch
+                _uiState.update { it.copy(isLoading = true, isSyncing = true) }
                 try {
                     val application = getApplication<Application>()
                     val count = contextRepository.getUsageCount()
@@ -146,7 +159,7 @@ class HabitViewModel
                         preferences.edit().putBoolean("stored_labels_resolved", true).apply()
                     }
 
-                    val revision = "${contextRepository.getUsageRevision()}|${contextRepository.getSnapshotRevision()}"
+                    val revision = contextRepository.getModelRevision(getStartOfDay())
                     if (labelsChanged || preferences.getString("source_revision", null) != revision) {
                         refreshHabits()
                         preferences.edit()
@@ -168,7 +181,40 @@ class HabitViewModel
                 } catch (error: Exception) {
                     android.util.Log.e("HabitMiner", "Could not sync usage or update the model", error)
                 } finally {
-                    _uiState.update { it.copy(isLoading = false) }
+                    syncMutex.unlock()
+                    _uiState.update { it.copy(isLoading = false, isSyncing = false) }
+                }
+            }
+        }
+
+        fun setRetentionDays(days: Int) {
+            val normalizedDays = days.coerceIn(30, 180)
+            val application = getApplication<Application>()
+            application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
+                .edit().putInt("retention_days", normalizedDays).apply()
+            _uiState.update { it.copy(retentionDays = normalizedDays) }
+            DataCollectionWorker.runOnce(application)
+        }
+
+        fun clearCollectedData() {
+            viewModelScope.launch(Dispatchers.IO) {
+                contextRepository.clearCollectedData()
+                habitRepository.clearModelData()
+                val application = getApplication<Application>()
+                application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE).edit()
+                    .remove("source_revision")
+                    .remove("days_of_data")
+                    .remove("predictability_score")
+                    .remove("stored_labels_resolved")
+                    .putBoolean("collection_enabled", false)
+                    .apply()
+                _uiState.update {
+                    HabitUiState(
+                        hasUsagePermission = true,
+                        hasRuntimePermissions = true,
+                        retentionDays = it.retentionDays,
+                        baselineStatus = "Data cleared. Tap Sync Usage to resume collection.",
+                    )
                 }
             }
         }
@@ -177,20 +223,21 @@ class HabitViewModel
             val startOfDay = getStartOfDay()
             val allUsage = contextRepository.getAllUsage().first()
             val todayUsage = contextRepository.getTodayUsage(startOfDay).first()
+            val historicalUsage = allUsage.filter { it.startTime < startOfDay }
 
             // Baseline
             val contextWindowStart = System.currentTimeMillis() - 90L * 24 * 60 * 60 * 1000
             val snapshots = contextRepository.getSnapshotsSince(contextWindowStart)
-            val newBaselines = baselineBuilder.buildBaseline(allUsage, snapshots)
+            val newBaselines = baselineBuilder.buildBaseline(historicalUsage, snapshots.filter { it.timestamp < startOfDay })
             newBaselines.forEach { habitRepository.insertBaseline(it) }
 
             // Habits
-            val habits = habitEngine.discoverHabits(allUsage)
+            val habits = habitEngine.discoverHabits(historicalUsage)
             habitRepository.deleteAllHabits()
             habits.forEach { habitRepository.insertHabit(it) }
 
             // Predictability
-            val predictability = habitEngine.computePredictabilityScore(allUsage)
+            val predictability = habitEngine.computePredictabilityScore(historicalUsage)
 
             // Deviations
             val deviationsResult = deviationDetector.detectDeviations(todayUsage, newBaselines)
@@ -271,7 +318,12 @@ class HabitViewModel
 
                 launch {
                     contextRepository.getLatestSnapshot().collect { snapshot ->
-                        _uiState.update { it.copy(latestContext = snapshot) }
+                        _uiState.update {
+                            it.copy(
+                                latestContext = snapshot,
+                                todayUnlocks = snapshot?.unlockCount ?: 0,
+                            )
+                        }
                     }
                 }
 

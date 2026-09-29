@@ -26,6 +26,12 @@ interface ContextDao {
     @Query("SELECT COALESCE(date(MAX(timestamp) / 1000, 'unixepoch', 'localtime'), '') || ':' || CAST(CAST(strftime('%H', MAX(timestamp) / 1000, 'unixepoch', 'localtime') AS INTEGER) / 6 AS TEXT) FROM context_snapshots")
     suspend fun getSnapshotRevision(): String
 
+    @Query("SELECT COUNT(*) || ':' || COALESCE(MAX(timestamp), 0) FROM context_snapshots WHERE timestamp < :beforeMs")
+    suspend fun getModelRevision(beforeMs: Long): String
+
     @Query("DELETE FROM context_snapshots WHERE timestamp < :timestampMs")
     suspend fun deleteOlderThan(timestampMs: Long)
+
+    @Query("DELETE FROM context_snapshots")
+    suspend fun deleteAll()
 }

@@ -85,7 +85,7 @@ class DeviationDetector
                             DeviationResult(
                                 timeBin = bin,
                                 deviationType = "EXCESS_DURATION",
-                                description = generateDescription("EXCESS_DURATION", cat, zScore, bin),
+                                description = "$cat was used for ${formatDuration(todayDuration)} in the $timeSlot, versus your usual ${formatDuration(expectedDuration)} by now.",
                                 zScore = zScore,
                                 normalizedScore = norm,
                                 affectedCategory = cat,
@@ -104,7 +104,7 @@ class DeviationDetector
                             DeviationResult(
                                 timeBin = bin,
                                 deviationType = "NEW_BEHAVIOR",
-                                description = generateDescription("NEW_BEHAVIOR", cat, 0f, bin),
+                                description = "$cat was used for ${formatDuration(duration)} in the $timeSlot, but it is not part of your usual routine for this time.",
                                 zScore = 2.0f,
                                 normalizedScore = 0.8f,
                                 affectedCategory = cat,
@@ -119,7 +119,7 @@ class DeviationDetector
                         DeviationResult(
                             timeBin = bin,
                             deviationType = "MISSING_ROUTINE",
-                            description = generateDescription("MISSING_ROUTINE", "ALL", -2.0f, bin),
+                            description = "Your usual $timeSlot activity of about ${formatDuration(base.avgScreenTimeMs)} has not appeared today.",
                             zScore = -2.0f,
                             normalizedScore = 0.7f,
                             affectedCategory = "ALL",
@@ -141,18 +141,19 @@ class DeviationDetector
             val timeLabel = if (parts.size > 1) parts[1].lowercase() else "time"
 
             return when (deviationType) {
-                "EXCESS_DURATION" -> "Your $timeLabel usage was significantly higher than usual (z=${String.format(
-                    java.util.Locale.US,
-                    "%.1f",
-                    zScore,
-                )})"
-                "NEW_BEHAVIOR" -> "Unusual activity detected: $category used in the $timeLabel"
-                "MISSING_ROUTINE" -> "Typical $timeLabel routine not detected today"
+                "EXCESS_DURATION" -> "$category took substantially more of your $timeLabel than your usual routine."
+                "NEW_BEHAVIOR" -> "$category is new in your typical $timeLabel routine today."
+                "MISSING_ROUTINE" -> "Your usual $timeLabel activity has not appeared today."
                 else -> "Deviation detected"
             }
         }
 
         fun getOverallDeviationScore(deviations: List<DeviationResult>): Float {
             return deviations.maxOfOrNull { it.normalizedScore }?.coerceIn(0f, 1f) ?: 0f
+        }
+
+        private fun formatDuration(milliseconds: Long): String {
+            val minutes = (milliseconds / 60_000).coerceAtLeast(1)
+            return if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m" else "${minutes}m"
         }
     }

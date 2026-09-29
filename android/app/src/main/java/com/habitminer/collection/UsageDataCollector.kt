@@ -95,7 +95,6 @@ class UsageDataCollector
             context: Context,
             packageName: String,
         ): String {
-            appCategoryMap[packageName]?.let { return it }
             return try {
                 val pm = context.packageManager
                 val info = pm.getApplicationInfo(packageName, 0)
@@ -106,10 +105,11 @@ class UsageDataCollector
                     -> "ENTERTAINMENT"
                     ApplicationInfo.CATEGORY_SOCIAL -> "SOCIAL"
                     ApplicationInfo.CATEGORY_PRODUCTIVITY -> "PRODUCTIVITY"
-                    else -> "OTHER"
+                    ApplicationInfo.CATEGORY_UNDEFINED -> appCategoryMap[packageName] ?: "OTHER"
+                    else -> appCategoryMap[packageName] ?: "OTHER"
                 }
             } catch (e: PackageManager.NameNotFoundException) {
-                "OTHER"
+                appCategoryMap[packageName] ?: "OTHER"
             }
         }
 

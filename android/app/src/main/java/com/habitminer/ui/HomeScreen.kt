@@ -19,11 +19,17 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,6 +47,7 @@ fun HomeScreen(
     viewModel: HabitViewModel,
 ) {
     val scrollState = rememberScrollState()
+    var confirmClearData by remember { mutableStateOf(false) }
 
     Column(
         modifier =
@@ -141,6 +148,13 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f),
             )
         }
+
+        Text(
+            text = "${state.todayUnlocks} unlocks today",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
 
         // Top App
         if (state.todayTopApp.isNotEmpty()) {
@@ -250,7 +264,14 @@ fun HomeScreen(
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
 
-        if (state.daysOfData < 3 && !state.isLoading) {
+        if (state.isSyncing) {
+            Text(
+                text = "Syncing your on-device data…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+        } else {
             Button(
                 onClick = { viewModel.loadHistoricalData() },
                 modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -258,6 +279,55 @@ fun HomeScreen(
                 Text("Sync Usage")
             }
         }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Data & Privacy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "Your usage, sensor, unlock, and notification summaries stay on this device. Raw audio is never recorded.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                )
+                Text(
+                    "Keep data for ${state.retentionDays} days",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(30, 90, 180).forEach { days ->
+                        TextButton(onClick = { viewModel.setRetentionDays(days) }) {
+                            Text(if (days == state.retentionDays) "✓ ${days}d" else "${days}d")
+                        }
+                    }
+                }
+                TextButton(onClick = { confirmClearData = true }) {
+                    Text("Clear collected data", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+
+    if (confirmClearData) {
+        AlertDialog(
+            onDismissRequest = { confirmClearData = false },
+            title = { Text("Clear local data?") },
+            text = { Text("This removes the usage, context, unlock, notification, habit, baseline, and deviation data stored by HabitMiner on this device.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClearData = false
+                        viewModel.clearCollectedData()
+                    },
+                ) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmClearData = false }) { Text("Cancel") } },
+        )
     }
 }
 

@@ -6,6 +6,7 @@ import com.habitminer.data.AppUsageDao
 import com.habitminer.data.BaselineDao
 import com.habitminer.data.ContextDao
 import com.habitminer.data.DeviationDao
+import com.habitminer.data.DeviceEventDao
 import com.habitminer.data.HabitDao
 import dagger.Module
 import dagger.Provides
@@ -39,4 +40,7 @@ object DatabaseModule {
 
     @Provides
     fun provideDeviationDao(database: AppDatabase): DeviationDao = database.deviationDao()
+
+    @Provides
+    fun provideDeviceEventDao(database: AppDatabase): DeviceEventDao = database.deviceEventDao()
 }
