@@ -16,6 +16,15 @@ import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.math.sqrt
 
+data class AccelerometerStats(
+    val mean: Float,
+    val variance: Float,
+    val std: Float,
+    val min: Float,
+    val max: Float,
+    val energy: Float,
+)
+
 @Singleton
 class SensorContextCollector
     @Inject
@@ -27,7 +36,7 @@ class SensorContextCollector
         suspend fun collectSnapshot(
             unlockCount: Int,
             isScreenOn: Boolean,
-            notificationCount: Int,
+            notificationsLastHour: Int,
             collectSensors: Boolean,
             batteryLevel: Int,
             isCharging: Boolean,
@@ -35,18 +44,23 @@ class SensorContextCollector
             val timestamp = System.currentTimeMillis()
 
             // Keep unavailable sensor readings distinct from real darkness / stillness.
-            val lightLevel = if (collectSensors) collectLightLevel() ?: -1f else -1f
-            val motionState = if (collectSensors) collectMotionState() ?: "UNKNOWN" else "UNKNOWN"
+            val lightLux = if (collectSensors) collectLightLevel() ?: -1f else -1f
+            val motionStats = if (collectSensors) collectMotionState() else null
 
             return ContextSnapshotEntity(
                 timestamp = timestamp,
-                motionState = motionState,
-                lightLevel = lightLevel,
+                accelMean = motionStats?.mean ?: -1f,
+                accelVariance = motionStats?.variance ?: -1f,
+                accelStd = motionStats?.std ?: -1f,
+                accelMin = motionStats?.min ?: -1f,
+                accelMax = motionStats?.max ?: -1f,
+                accelEnergy = motionStats?.energy ?: -1f,
+                lightLux = lightLux,
                 batteryLevel = batteryLevel,
                 isCharging = isCharging,
                 isScreenOn = isScreenOn,
                 unlockCount = unlockCount,
-                notificationCount = notificationCount,
+                notificationsLastHour = notificationsLastHour,
             )
         }
 
@@ -88,7 +102,7 @@ class SensorContextCollector
                 }
             }
 
-        private suspend fun collectMotionState(): String? =
+        private suspend fun collectMotionState(): AccelerometerStats? =
             withTimeoutOrNull(2000L) {
                 suspendCancellableCoroutine { continuation ->
                     val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -118,14 +132,21 @@ class SensorContextCollector
                                                 variance += (v - mean) * (v - mean)
                                             }
                                             variance /= samples.size
+                                            val std = sqrt(variance)
+                                            val min = samples.minOrNull() ?: 0f
+                                            val max = samples.maxOrNull() ?: 0f
+                                            val energy = samples.map { it * it }.average().toFloat()
 
-                                            val state =
-                                                when {
-                                                    variance < 0.5f -> "STILL"
-                                                    variance < 2.0f -> "WALKING"
-                                                    else -> "ACTIVE"
-                                                }
-                                            continuation.resume(state)
+                                            val stats =
+                                                AccelerometerStats(
+                                                    mean = mean,
+                                                    variance = variance,
+                                                    std = std,
+                                                    min = min,
+                                                    max = max,
+                                                    energy = energy,
+                                                )
+                                            continuation.resume(stats)
                                         }
                                     }
                                 }

@@ -12,8 +12,8 @@ data class BaselineEntity(
     val stdSessionCount: Float,
     val avgUnlockCount: Float,
     val typicalCategoriesJson: String,
-    val dominantMotionState: String,
-    val avgLightLevel: Float,
+    val avgAccelEnergy: Float,
+    val avgLightLux: Float,
     val updatedAt: Long,
     val dataPointCount: Int,
 )

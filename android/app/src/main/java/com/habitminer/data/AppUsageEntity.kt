@@ -21,4 +21,5 @@ data class AppUsageEntity(
     val durationMs: Long,
     val timeSlot: String,
     val dayType: String,
+    val previousPackageName: String? = null,
 )

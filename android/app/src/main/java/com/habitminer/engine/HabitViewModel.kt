@@ -65,6 +65,7 @@ data class HabitUiState(
     val hasUsagePermission: Boolean = false,
     val hasNotificationPermission: Boolean = false,
     val hasRuntimePermissions: Boolean = false,
+    val expectedScreenTimeMs: Long = 0L,
 )
 
 @OptIn(FlowPreview::class)
@@ -353,6 +354,16 @@ class HabitViewModel
                 launch {
                     habitRepository.getAllHabits().collect { habits ->
                         _uiState.update { it.copy(discoveredHabits = habits.toImmutableList()) }
+                    }
+                }
+
+                launch {
+                    habitRepository.getAllBaselines().collect { baselines ->
+                        val cal = Calendar.getInstance()
+                        val day = cal.get(Calendar.DAY_OF_WEEK)
+                        val dayType = if (day == Calendar.SATURDAY || day == Calendar.SUNDAY) "WEEKEND" else "WEEKDAY"
+                        val expected = baselines.filter { it.timeBin.startsWith(dayType) }.sumOf { it.avgScreenTimeMs }
+                        _uiState.update { it.copy(expectedScreenTimeMs = expected) }
                     }
                 }
 

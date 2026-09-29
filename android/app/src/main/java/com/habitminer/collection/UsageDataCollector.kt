@@ -204,6 +204,15 @@ class UsageDataCollector
                     )
                 }
             }
+
+            result.sortBy { it.startTime }
+            var prevPkg: String? = null
+            for (i in result.indices) {
+                val current = result[i]
+                result[i] = current.copy(previousPackageName = prevPkg)
+                prevPkg = current.packageName
+            }
+
             return result
         }
 

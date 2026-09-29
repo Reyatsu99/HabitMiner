@@ -130,6 +130,7 @@ fun HomeScreen(
             )
             DailySummaryGrid(
                 screenTimeMs = state.todayScreenTimeMs,
+                expectedScreenTimeMs = state.expectedScreenTimeMs,
                 unlocks = state.todayUnlocks,
                 topApp = state.todayTopApp,
                 baselineStatus = state.baselineStatus,
@@ -161,23 +162,32 @@ fun ContextHeroBanner(
     hasNotificationPermission: Boolean,
 ) {
     val motion =
-        when (context.motionState) {
-            "STILL" -> "🧍 Still"
-            "WALKING" -> "🚶 Walking"
-            "UNKNOWN" -> "❔ Unknown"
-            else -> "🏃 Active"
+        if (context.accelVariance < 0f) {
+            "❔ Unknown"
+        } else if (context.accelVariance < 0.5f) {
+            "🧍 Low motion"
+        } else if (context.accelVariance < 2.0f) {
+            "🚶 Moderate motion"
+        } else {
+            "🏃 High motion"
         }
     val light =
-        if (context.lightLevel < 0) {
+        if (context.lightLux < 0) {
             "❔ Unavailable"
-        } else if (context.lightLevel > 100) {
+        } else if (context.lightLux > 100) {
             "☀️ Bright"
-        } else if (context.lightLevel > 10) {
+        } else if (context.lightLux > 10) {
             "🌙 Dim"
         } else {
             "🌑 Dark"
         }
-    val notifications = if (hasNotificationPermission && context.notificationCount >= 0) " • 🔔 ${context.notificationCount}" else ""
+    val batteryText = if (context.batteryLevel < 0) "Unavailable" else "${context.batteryLevel}%"
+    val notifications =
+        if (hasNotificationPermission && context.notificationsLastHour >= 0) {
+            " • 🔔 ${context.notificationsLastHour}"
+        } else {
+            ""
+        }
 
     Box(
         modifier =
@@ -198,7 +208,7 @@ fun ContextHeroBanner(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "$motion • 🔋 ${context.batteryLevel}% • $light$notifications",
+                text = "$motion • 🔋 $batteryText • $light$notifications",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
@@ -260,6 +270,7 @@ fun ActionableInsightCard(
 @Composable
 fun DailySummaryGrid(
     screenTimeMs: Long,
+    expectedScreenTimeMs: Long,
     unlocks: Int,
     topApp: String,
     baselineStatus: String,
@@ -288,8 +299,8 @@ fun DailySummaryGrid(
                 val hours = screenTimeMs / (1000 * 60 * 60)
                 val minutes = (screenTimeMs / (1000 * 60)) % 60
 
-                // Mock target of 4 hours for the progress ring
-                val progress = (screenTimeMs.toFloat() / (4 * 60 * 60 * 1000)).coerceIn(0f, 1f)
+                val targetMs = if (expectedScreenTimeMs > 0L) expectedScreenTimeMs else (4 * 60 * 60 * 1000L) // fallback if no baseline yet
+                val progress = (screenTimeMs.toFloat() / targetMs).coerceIn(0f, 1f)
                 val progressColor = if (progress > 0.8f) Color(0xFFF59E0B) else Color(0xFF38BDF8)
 
                 Box(contentAlignment = Alignment.Center) {

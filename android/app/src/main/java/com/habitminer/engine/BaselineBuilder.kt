@@ -62,7 +62,6 @@ class BaselineBuilder
                 val binParts = bin.split('_', limit = 2)
                 val matchingSnapshots =
                     snapshots.filter { snapshot ->
-                        if (snapshot.lightLevel < 0f) return@filter false
                         val cal = Calendar.getInstance().apply { timeInMillis = snapshot.timestamp }
                         val day = cal.get(Calendar.DAY_OF_WEEK)
                         val dayType = if (day == Calendar.SATURDAY || day == Calendar.SUNDAY) "WEEKEND" else "WEEKDAY"
@@ -76,8 +75,12 @@ class BaselineBuilder
                             }
                         dayType == binParts[0] && timeSlot == binParts[1]
                     }
-                val dominantMotion = matchingSnapshots.groupingBy { it.motionState }.eachCount().maxByOrNull { it.value }?.key ?: "UNKNOWN"
-                val averageLight = matchingSnapshots.map { it.lightLevel }.average().takeIf { it.isFinite() }?.toFloat() ?: -1f
+                val validLightSnaps = matchingSnapshots.filter { it.lightLux >= 0f }
+                val averageLight = if (validLightSnaps.isNotEmpty()) validLightSnaps.map { it.lightLux }.average().toFloat() else -1f
+
+                val validEnergySnaps = matchingSnapshots.filter { it.accelEnergy >= 0f }
+                val averageEnergy = if (validEnergySnaps.isNotEmpty()) validEnergySnaps.map { it.accelEnergy }.average().toFloat() else -1f
+
                 val averageUnlocks = matchingSnapshots.map { it.unlockCount.toFloat() }.average().takeIf { it.isFinite() }?.toFloat() ?: 0f
 
                 val newBaseline =
@@ -89,8 +92,8 @@ class BaselineBuilder
                         stdSessionCount = stdSess,
                         avgUnlockCount = averageUnlocks,
                         typicalCategoriesJson = gson.toJson(avgCategories),
-                        dominantMotionState = dominantMotion,
-                        avgLightLevel = averageLight,
+                        avgAccelEnergy = averageEnergy,
+                        avgLightLux = averageLight,
                         updatedAt = System.currentTimeMillis(),
                         dataPointCount = dataPointCount,
                     )

@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DeviationEntity::class,
         DeviceEventEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                         AppDatabase::class.java,
                         "habitminer_database",
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                         .fallbackToDestructiveMigration()
                         .build()
                 instance = newInstance
@@ -87,6 +87,67 @@ abstract class AppDatabase : RoomDatabase() {
 
                     // Add index for deviations
                     database.execSQL("CREATE INDEX IF NOT EXISTS index_deviations_timestamp ON deviations(timestamp)")
+                }
+            }
+
+        private val MIGRATION_3_4 =
+            object : Migration(3, 4) {
+                override fun migrate(database: SupportSQLiteDatabase) {
+                    database.execSQL("ALTER TABLE app_usage ADD COLUMN previousPackageName TEXT DEFAULT NULL")
+
+                    database.execSQL(
+                        "CREATE TABLE IF NOT EXISTS context_snapshots_new (" +
+                            "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "timestamp INTEGER NOT NULL, " +
+                            "accelMean REAL NOT NULL, " +
+                            "accelVariance REAL NOT NULL, " +
+                            "accelStd REAL NOT NULL, " +
+                            "accelMin REAL NOT NULL, " +
+                            "accelMax REAL NOT NULL, " +
+                            "accelEnergy REAL NOT NULL, " +
+                            "lightLux REAL NOT NULL, " +
+                            "batteryLevel INTEGER NOT NULL, " +
+                            "isCharging INTEGER NOT NULL, " +
+                            "isScreenOn INTEGER NOT NULL, " +
+                            "unlockCount INTEGER NOT NULL, " +
+                            "notificationsLastHour INTEGER NOT NULL)",
+                    )
+                    database.execSQL(
+                        "INSERT INTO context_snapshots_new " +
+                            "(id, timestamp, accelMean, accelVariance, accelStd, accelMin, accelMax, " +
+                            "accelEnergy, lightLux, batteryLevel, isCharging, isScreenOn, unlockCount, notificationsLastHour) " +
+                            "SELECT id, timestamp, -1, -1, -1, -1, -1, -1, lightLevel, " +
+                            "batteryLevel, isCharging, isScreenOn, unlockCount, notificationCount " +
+                            "FROM context_snapshots",
+                    )
+                    database.execSQL("DROP TABLE context_snapshots")
+                    database.execSQL("ALTER TABLE context_snapshots_new RENAME TO context_snapshots")
+                    database.execSQL("CREATE INDEX IF NOT EXISTS index_context_snapshots_timestamp ON context_snapshots(timestamp)")
+
+                    database.execSQL(
+                        "CREATE TABLE IF NOT EXISTS baseline_new (" +
+                            "timeBin TEXT PRIMARY KEY NOT NULL, " +
+                            "avgScreenTimeMs INTEGER NOT NULL, " +
+                            "stdScreenTimeMs INTEGER NOT NULL, " +
+                            "avgSessionCount REAL NOT NULL, " +
+                            "stdSessionCount REAL NOT NULL, " +
+                            "avgUnlockCount REAL NOT NULL, " +
+                            "typicalCategoriesJson TEXT NOT NULL, " +
+                            "avgAccelEnergy REAL NOT NULL, " +
+                            "avgLightLux REAL NOT NULL, " +
+                            "updatedAt INTEGER NOT NULL, " +
+                            "dataPointCount INTEGER NOT NULL)",
+                    )
+                    database.execSQL(
+                        "INSERT INTO baseline_new (timeBin, avgScreenTimeMs, stdScreenTimeMs, " +
+                            "avgSessionCount, stdSessionCount, avgUnlockCount, typicalCategoriesJson, " +
+                            "avgAccelEnergy, avgLightLux, updatedAt, dataPointCount) " +
+                            "SELECT timeBin, avgScreenTimeMs, stdScreenTimeMs, avgSessionCount, " +
+                            "stdSessionCount, avgUnlockCount, typicalCategoriesJson, -1, avgLightLevel, " +
+                            "updatedAt, dataPointCount FROM baseline",
+                    )
+                    database.execSQL("DROP TABLE baseline")
+                    database.execSQL("ALTER TABLE baseline_new RENAME TO baseline")
                 }
             }
     }

@@ -65,24 +65,44 @@ class DataCollectionWorker
                         timeInMillis
                     }
                 val unlockCount = eventDao.countSince(DeviceEventReceiver.EVENT_UNLOCK, startOfDay)
-                val notifCount =
+                val notificationsLastHour =
                     if (HabitNotificationListener.isEnabled(appContext)) {
                         eventDao.countSince(DeviceEventReceiver.EVENT_NOTIFICATION, now - TimeUnit.HOURS.toMillis(1))
                     } else {
                         -1
                     }
                 val batteryManager = appContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-                val batteryLevel = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                val shouldSampleSensors = isScreenOn && (batteryLevel >= 15 || batteryManager.isCharging)
+                var batteryLevel = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                var isCharging = batteryManager.isCharging
+                if (batteryLevel !in 0..100) {
+                    val filter = android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
+                    val batteryIntent = appContext.registerReceiver(null, filter)
+                    if (batteryIntent != null) {
+                        val level = batteryIntent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+                        val scale = batteryIntent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+                        if (level >= 0 && scale > 0) {
+                            batteryLevel = (level * 100 / scale)
+                        } else {
+                            batteryLevel = -1
+                        }
+                        val status = batteryIntent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+                        isCharging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+                            status == android.os.BatteryManager.BATTERY_STATUS_FULL
+                    } else {
+                        batteryLevel = -1
+                    }
+                }
+
+                val shouldSampleSensors = isScreenOn && (batteryLevel >= 15 || isCharging)
 
                 val snapshot =
                     sensorCollector.collectSnapshot(
                         unlockCount = unlockCount,
                         isScreenOn = isScreenOn,
-                        notificationCount = notifCount,
+                        notificationsLastHour = notificationsLastHour,
                         collectSensors = shouldSampleSensors,
                         batteryLevel = batteryLevel,
-                        isCharging = batteryManager.isCharging,
+                        isCharging = isCharging,
                     )
 
                 contextDao.insert(snapshot)
