@@ -3,6 +3,7 @@
 package com.habitminer.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,9 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,37 +29,46 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.habitminer.data.DeviationEntity
+import com.habitminer.data.DiscoveredHabitEntity
 import com.habitminer.engine.HabitUiState
+import com.habitminer.ui.components.InfoCard
+import com.habitminer.ui.components.LoadingState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun InsightsScreen(state: HabitUiState) {
+    if (!state.hasEnoughData && state.recentDeviations.isEmpty() && state.discoveredHabits.isEmpty()) {
+        LoadingState(
+            message = "Building your habit model...\nCurrently at ${state.daysOfData}/5 days of required data.",
+        )
+        return
+    }
+
     LazyColumn(
         modifier =
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "Wellness Insights",
+                text = "Insights",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
         item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp).fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
+            SectionHeader("Routine predictability")
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 16.dp)) {
                     PredictabilityGauge(score = state.predictabilityScore)
                     Spacer(modifier = Modifier.height(16.dp))
                     val label =
@@ -73,83 +81,143 @@ fun InsightsScreen(state: HabitUiState) {
                         text = label,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
-                        text = "Routine Predictability",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        text = "[Experimental]",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                     )
                 }
             }
         }
 
         item {
-            Text(
-                text = "Recent Deviations",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+            SectionHeader("DISCOVERED PATTERNS")
         }
 
-        if (state.todayDeviations.isEmpty()) {
+        if (state.discoveredHabits.isEmpty()) {
             item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
+                InfoCard(
+                    title = "No strong routines yet",
+                    message = "Your usage varies too much to form a highly confident routine. Keep using your phone normally.",
+                )
+            }
+        } else {
+            val visibleHabits = state.discoveredHabits.take(4)
+            items(visibleHabits, key = { it.id }) { habit ->
+                TypographicHabitItem(habit = habit)
+                Divider(color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 12.dp))
+            }
+            if (state.discoveredHabits.size > 4) {
+                item {
                     Text(
-                        text = "✅  No deviations from your baseline today.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(20.dp),
+                        text = "${state.discoveredHabits.size} patterns discovered  ·  View all →",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 8.dp).clickable { /* TODO */ },
                     )
                 }
             }
+        }
+
+        item {
+            SectionHeader("RECENT DEVIATIONS")
+        }
+
+        if (state.recentDeviations.isEmpty()) {
+            item {
+                InfoCard(
+                    title = "All Good!",
+                    message = "No recent deviations from your established baseline.",
+                )
+            }
         } else {
-            items(state.todayDeviations, key = { it.id }) { dev ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = dev.deviationType.replace('_', ' '),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            val impactColor = if (dev.normalizedScore > 0.7f) Color(0xFFEF4444) else Color(0xFFF59E0B)
-                            Text(
-                                text = "${(dev.normalizedScore * 100).toInt()}% Impact",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = impactColor,
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = dev.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = dev.timeBin.replace('_', ' '),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        )
-                    }
+            val visibleDeviations = state.recentDeviations.take(4)
+            items(visibleDeviations, key = { it.id + 100000L }) { dev ->
+                TypographicDeviationItem(dev = dev)
+                Divider(color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 12.dp))
+            }
+            if (state.recentDeviations.size > 4) {
+                item {
+                    Text(
+                        text = "${state.recentDeviations.size} recent deviations  ·  View all →",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 8.dp).clickable { /* TODO */ },
+                    )
                 }
             }
         }
 
-        item { Spacer(modifier = Modifier.height(16.dp)) }
+        item { Spacer(modifier = Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+fun SectionHeader(title: String) {
+    Column {
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+        )
+        Divider(color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 8.dp))
+    }
+}
+
+@Composable
+fun TypographicHabitItem(habit: DiscoveredHabitEntity) {
+    Column {
+        Text(
+            text = habit.habitName,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "${habit.timeSlot} · ${habit.dayType} · ${(habit.confidence * 100).toInt()}% match",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = habit.patternDescription,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+@Composable
+fun TypographicDeviationItem(dev: DeviationEntity) {
+    val df = SimpleDateFormat("MMM d · HH:mm", Locale.getDefault())
+    val dateStr = df.format(Date(dev.timestamp))
+    val isHighImpact = dev.normalizedScore > 0.7f
+    val impactColor = if (isHighImpact) MaterialTheme.colorScheme.error else Color(0xFFF59E0B)
+
+    Column {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                text = dateStr,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+            )
+            Text(
+                text = dev.deviationType.replace('_', ' '),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = impactColor,
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = dev.description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
     }
 }
 
@@ -157,7 +225,7 @@ fun InsightsScreen(state: HabitUiState) {
 fun PredictabilityGauge(score: Float) {
     val color =
         when {
-            score > 70f -> Color(0xFF4ADE80)
+            score > 70f -> Color(0xFF10B981)
             score > 40f -> Color(0xFFF59E0B)
             else -> Color(0xFFEF4444)
         }
@@ -167,35 +235,35 @@ fun PredictabilityGauge(score: Float) {
         contentAlignment = Alignment.Center,
         modifier =
             Modifier
-                .size(140.dp)
+                .size(160.dp)
                 .semantics { contentDescription = gaugeDescription },
     ) {
-        Canvas(modifier = Modifier.size(140.dp)) {
+        Canvas(modifier = Modifier.size(160.dp)) {
             drawArc(
                 color = color.copy(alpha = 0.2f),
                 startAngle = 135f,
                 sweepAngle = 270f,
                 useCenter = false,
-                style = Stroke(width = 14.dp.toPx(), cap = StrokeCap.Round),
+                style = Stroke(width = 16.dp.toPx(), cap = StrokeCap.Round),
             )
             drawArc(
                 color = color,
                 startAngle = 135f,
                 sweepAngle = 270f * (score / 100f).coerceIn(0f, 1f),
                 useCenter = false,
-                style = Stroke(width = 14.dp.toPx(), cap = StrokeCap.Round),
+                style = Stroke(width = 16.dp.toPx(), cap = StrokeCap.Round),
             )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = "${score.toInt()}%",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = "Score",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 color = color,
             )
         }

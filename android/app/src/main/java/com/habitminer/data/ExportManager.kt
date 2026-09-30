@@ -34,10 +34,11 @@ class ExportManager
                 val usages = appUsageDao.getAllUsage().firstOrNull() ?: emptyList()
                 FileWriter(usageFile).use { writer ->
                     writer.append("id,packageName,appName,appCategory,startTime,endTime,")
-                    writer.append("durationMs,timeSlot,dayType,previousPackageName\n")
+                    writer.append("durationMs,timeSlot,dayType,previousPackageName,isHistorical\n")
                     usages.forEach {
                         writer.append("${it.id},${it.packageName},\"${it.appName}\",${it.appCategory},${it.startTime},")
-                        writer.append("${it.endTime},${it.durationMs},${it.timeSlot},${it.dayType},${it.previousPackageName ?: ""}\n")
+                        writer.append("${it.endTime},${it.durationMs},${it.timeSlot},${it.dayType},")
+                        writer.append("${it.previousPackageName ?: ""},${it.isHistorical}\n")
                     }
                 }
 

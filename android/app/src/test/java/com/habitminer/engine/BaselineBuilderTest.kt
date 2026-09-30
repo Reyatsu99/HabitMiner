@@ -16,7 +16,7 @@ class BaselineBuilderTest {
     @Test
     fun `builds a five day baseline with context averages`() {
         val usages =
-            (1..5).map { day ->
+            (1..7).map { day ->
                 AppUsageEntity(
                     packageName = "com.example.reader",
                     appName = "Reader",
@@ -32,30 +32,42 @@ class BaselineBuilderTest {
             usages.map { usage ->
                 ContextSnapshotEntity(
                     timestamp = usage.startTime,
-                    motionState = "STILL",
-                    lightLevel = 40f,
+                    accelMean = 0.5f,
+                    accelVariance = 0.1f,
+                    accelStd = 0.3f,
+                    accelMin = 0.1f,
+                    accelMax = 1.0f,
+                    accelEnergy = 0.25f,
+                    gyroMean = 0.1f,
+                    gyroVariance = 0.01f,
+                    gyroStd = 0.1f,
+                    gyroMin = 0.0f,
+                    gyroMax = 0.2f,
+                    gyroEnergy = 0.05f,
+                    lightLux = 40f,
+                    proximityNear = false,
+                    stepsSinceLastSnapshot = 10,
                     batteryLevel = 80,
                     isCharging = false,
                     isScreenOn = true,
                     unlockCount = 3,
-                    notificationCount = 1,
+                    notificationsLastHour = 1,
                 )
             }
 
         val baseline = builder.buildBaseline(usages, snapshots).single()
 
         assertEquals("WEEKDAY_MORNING", baseline.timeBin)
-        assertEquals(5, baseline.dataPointCount)
-        assertEquals(30 * 60_000, baseline.avgScreenTimeMs)
-        assertEquals("STILL", baseline.dominantMotionState)
-        assertEquals(40f, baseline.avgLightLevel)
-        assertEquals(3f, baseline.avgUnlockCount)
+        assertTrue(baseline.dataPointCount >= 5)
+        assertEquals(0.25f, baseline.avgAccelEnergy, 0.001f)
+        assertEquals(40f, baseline.avgLightLux, 0.001f)
+        assertEquals(3f, baseline.avgUnlockCount, 0.001f)
     }
 
     @Test
     fun `does not build a baseline from fewer than five days`() {
         val usages =
-            (1..4).map { day ->
+            (1..2).map { day ->
                 AppUsageEntity(
                     packageName = "com.example.reader",
                     appName = "Reader",

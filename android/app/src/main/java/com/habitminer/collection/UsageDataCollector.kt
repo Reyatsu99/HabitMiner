@@ -113,6 +113,7 @@ class UsageDataCollector
         suspend fun collectUsageSince(
             sinceMs: Long,
             prevStoredPackage: String? = null,
+            isHistorical: Boolean = false,
         ): List<AppUsageEntity> {
             val endMs = System.currentTimeMillis()
             val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
@@ -147,19 +148,52 @@ class UsageDataCollector
                     -1
                 }
 
+            val screenOffEvent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) 16 else -1 // SCREEN_NON_INTERACTIVE
+            val keyguardShownEvent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) 18 else -1 // KEYGUARD_SHOWN
+            val deviceShutdownEvent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) 26 else -1 // DEVICE_SHUTDOWN
+
             val event = UsageEvents.Event()
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
                 val pkg = event.packageName
 
-                // Exclude home/launcher packages from session tracking
-                if (appIdentityResolver.isLauncher(pkg)) {
+                // If screen turns off or device shuts down, close all active sessions
+                if (event.eventType == screenOffEvent || event.eventType == keyguardShownEvent || event.eventType == deviceShutdownEvent) {
+                    val activePkgs = startTimes.keys.toList()
+                    for (activePkg in activePkgs) {
+                        val start = startTimes.remove(activePkg)
+                        if (start != null) {
+                            val duration = event.timeStamp - start
+                            if (duration > 2000) {
+                                val cal = Calendar.getInstance().apply { timeInMillis = start }
+                                result.add(
+                                    AppUsageEntity(
+                                        id = stableSessionId(activePkg, start),
+                                        packageName = activePkg,
+                                        appName = appIdentityResolver.getAppName(activePkg),
+                                        appCategory = getCategoryForPackage(activePkg),
+                                        startTime = start,
+                                        endTime = event.timeStamp,
+                                        durationMs = duration,
+                                        timeSlot = getTimeSlot(cal.get(Calendar.HOUR_OF_DAY)),
+                                        dayType = getDayType(cal.get(Calendar.DAY_OF_WEEK)),
+                                        isHistorical = isHistorical,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    continue
+                }
+
+                // Exclude home/launcher packages, this app, and system UI from session tracking
+                if (appIdentityResolver.isLauncher(pkg) || pkg == context.packageName || pkg == "com.android.systemui") {
                     continue
                 }
 
                 if (event.eventType == foregroundEvent) {
                     startTimes[pkg] = event.timeStamp
-                } else if (event.eventType == backgroundEvent) {
+                } else if (event.eventType == backgroundEvent || event.eventType == stoppedEvent) {
                     val start = startTimes.remove(pkg)
                     if (start != null) {
                         val duration = event.timeStamp - start
@@ -179,6 +213,7 @@ class UsageDataCollector
                                     durationMs = duration,
                                     timeSlot = getTimeSlot(hour),
                                     dayType = getDayType(dayOfWeek),
+                                    isHistorical = isHistorical,
                                 ),
                             )
                         }
@@ -189,7 +224,10 @@ class UsageDataCollector
             // Include sessions still foregrounded when this collection ran. A later
             // overlapping collection replaces this row with the longer duration.
             for ((pkg, start) in startTimes) {
-                val duration = endMs - start
+                // Defensive cap at 4 hours (14400000 ms) in case of missed close events
+                val maxAllowedEnd = start + 14400000L
+                val actualEnd = if (endMs > maxAllowedEnd) maxAllowedEnd else endMs
+                val duration = actualEnd - start
                 if (duration > 2000L) {
                     val cal = Calendar.getInstance().apply { timeInMillis = start }
                     result.add(
@@ -199,24 +237,57 @@ class UsageDataCollector
                             appName = appIdentityResolver.getAppName(pkg),
                             appCategory = getCategoryForPackage(pkg),
                             startTime = start,
-                            endTime = endMs,
+                            endTime = actualEnd,
                             durationMs = duration,
                             timeSlot = getTimeSlot(cal.get(Calendar.HOUR_OF_DAY)),
                             dayType = getDayType(cal.get(Calendar.DAY_OF_WEEK)),
+                            isHistorical = isHistorical,
                         ),
                     )
                 }
             }
 
             result.sortBy { it.startTime }
-            var prevPkg: String? = prevStoredPackage
-            for (i in result.indices) {
-                val current = result[i]
-                result[i] = current.copy(previousPackageName = prevPkg)
-                prevPkg = current.packageName
+
+            // Merge contiguous or overlapping sessions of the same package (gap < 5 mins)
+            val mergedResult = mergeContiguousSessions(result)
+
+            var tempPrev: String? = null
+            for (i in mergedResult.indices) {
+                mergedResult[i] = mergedResult[i].copy(previousPackageName = tempPrev)
+                tempPrev = mergedResult[i].packageName
             }
 
-            return result
+            val newSessions = mergedResult.filter { it.endTime > sinceMs }.toMutableList()
+            if (newSessions.isNotEmpty() && newSessions.first().previousPackageName == null) {
+                newSessions[0] = newSessions[0].copy(previousPackageName = prevStoredPackage)
+            }
+
+            return newSessions
+        }
+
+        fun mergeContiguousSessions(sessions: List<AppUsageEntity>): MutableList<AppUsageEntity> {
+            val mergedResult = mutableListOf<AppUsageEntity>()
+            for (session in sessions) {
+                if (mergedResult.isEmpty()) {
+                    mergedResult.add(session)
+                } else {
+                    val prev = mergedResult.last()
+                    // If same package and gap is less than 5 minutes (300,000 ms)
+                    if (prev.packageName == session.packageName && (session.startTime - prev.endTime) <= 300000L) {
+                        val newEnd = maxOf(prev.endTime, session.endTime)
+                        val newDuration = newEnd - prev.startTime
+                        mergedResult[mergedResult.lastIndex] =
+                            prev.copy(
+                                endTime = newEnd,
+                                durationMs = newDuration,
+                            )
+                    } else {
+                        mergedResult.add(session)
+                    }
+                }
+            }
+            return mergedResult
         }
 
         private fun stableSessionId(
@@ -230,6 +301,6 @@ class UsageDataCollector
         suspend fun collectLast14Days(): List<AppUsageEntity> {
             val cal = Calendar.getInstance()
             cal.add(Calendar.DAY_OF_YEAR, -14)
-            return collectUsageSince(cal.timeInMillis)
+            return collectUsageSince(cal.timeInMillis, isHistorical = true)
         }
     }

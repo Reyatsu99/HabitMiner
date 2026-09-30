@@ -37,9 +37,14 @@ class PredictionEngine
             return matrix
         }
 
-        private var cachedMatrix: Map<String, Map<String, Map<String, Int>>> = emptyMap()
-        private var lastUsageHash: Int = 0
-        private var vocabularySize: Int = 0
+        data class Cache(
+            val matrix: Map<String, Map<String, Map<String, Int>>>,
+            val vocabularySize: Int,
+            val lastTimestamp: Long,
+        )
+
+        @Volatile
+        private var cache: Cache? = null
 
         fun predict(
             usage: List<AppUsageEntity>,
@@ -47,16 +52,19 @@ class PredictionEngine
             timeSlot: String,
             dayType: String,
         ): List<Prediction> {
-            val validUsage = usage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
-            val currentHash = validUsage.hashCode()
-            if (currentHash != lastUsageHash) {
-                cachedMatrix = buildTransitionMatrix(validUsage)
-                vocabularySize = validUsage.map { it.appName }.distinct().size
-                lastUsageHash = currentHash
+            val lastTime = usage.maxOfOrNull { it.endTime } ?: 0L
+            var currentCache = cache
+            if (currentCache == null || currentCache.lastTimestamp != lastTime) {
+                val validUsage = usage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
+                val matrix = buildTransitionMatrix(validUsage)
+                val vocab = validUsage.map { it.appName }.distinct().size
+                currentCache = Cache(matrix, vocab, lastTime)
+                cache = currentCache
             }
 
+            val validUsage = usage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
             val bin = "${dayType}_$timeSlot"
-            val binMatrix = cachedMatrix[bin] ?: return emptyList()
+            val binMatrix = currentCache.matrix[bin] ?: return emptyList()
             val transitions = binMatrix[currentApp]
 
             if (transitions == null || transitions.isEmpty()) {
@@ -71,7 +79,7 @@ class PredictionEngine
             }
 
             val alpha = 0.1f // Laplace smoothing
-            val totalTransitions = transitions.values.sum() + (vocabularySize * alpha)
+            val totalTransitions = transitions.values.sum() + (currentCache.vocabularySize * alpha)
 
             return transitions.map { (cat, count) ->
                 val prob = (count + alpha) / totalTransitions

@@ -2,11 +2,16 @@
 
 package com.habitminer.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme =
     darkColorScheme(
@@ -31,13 +36,47 @@ private val DarkColorScheme =
         outlineVariant = Color(0xFF243042),
     )
 
+private val LightColorScheme =
+    lightColorScheme(
+        primary = Color(0xFF0284C7),
+        secondary = Color(0xFF16A34A),
+        background = Color(0xFFF8FAFC),
+        surface = Color(0xFFFFFFFF),
+        surfaceVariant = Color(0xFFE2E8F0),
+        onPrimary = Color.White,
+        onSecondary = Color.White,
+        onBackground = Color(0xFF0F172A),
+        onSurface = Color(0xFF0F172A),
+        onSurfaceVariant = Color(0xFF475569),
+        primaryContainer = Color(0xFFE0F2FE),
+        onPrimaryContainer = Color(0xFF075985),
+        secondaryContainer = Color(0xFFDCFCE7),
+        onSecondaryContainer = Color(0xFF14532D),
+        error = Color(0xFFDC2626),
+        errorContainer = Color(0xFFFEE2E2),
+        onErrorContainer = Color(0xFF991B1B),
+        outline = Color(0xFFCBD5E1),
+        outlineVariant = Color(0xFFF1F5F9),
+    )
+
 @Composable
 fun HabitMinerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    val colorScheme =
+        when {
+            dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                val context = LocalContext.current
+                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            }
+            darkTheme -> DarkColorScheme
+            else -> LightColorScheme
+        }
+
     MaterialTheme(
-        colorScheme = DarkColorScheme,
+        colorScheme = colorScheme,
         typography = HabitMinerTypography,
         content = content,
     )

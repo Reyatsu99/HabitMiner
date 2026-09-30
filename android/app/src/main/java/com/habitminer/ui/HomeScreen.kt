@@ -2,8 +2,6 @@
 
 package com.habitminer.ui
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -29,21 +28,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.habitminer.data.ContextSnapshotEntity
 import com.habitminer.engine.HabitUiState
 import com.habitminer.engine.HabitViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.habitminer.ui.components.HabitCard
+import com.habitminer.ui.components.TopAppMiniChart
 
 @Composable
 fun HomeScreen(
@@ -60,37 +55,34 @@ fun HomeScreen(
                 .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        // Header
-        Column {
+        // First Run Experience
+        if (state.daysOfData == 0 && state.todayScreenTimeMs == 0L && state.discoveredHabits.isEmpty()) {
+            FirstRunExperience(state, viewModel)
+            return@Column
+        }
+
+        // Header and Learning Status
+        LearningStatusHeader(state)
+
+        // Today's Usage Section
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(
-                text = "HabitMiner",
-                style = MaterialTheme.typography.headlineLarge,
+                text = "Today's behavior",
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            Text(
-                text = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date()),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-            )
+            TodayUsageCard(state)
         }
 
-        // Hero Context Banner
-        state.latestContext?.let { ctx ->
-            ContextHeroBanner(
-                context = ctx,
-                hasNotificationPermission = state.hasNotificationPermission,
-            )
-        }
-
-        // Actionable Insights Section
+        // Patterns & Deviations Section
         val hasDeviations = state.overallDeviationScore > 0.4f && state.todayDeviations.isNotEmpty()
         val hasPredictions = state.predictions.isNotEmpty()
 
-        if (hasDeviations || hasPredictions) {
+        if (state.discoveredHabits.isNotEmpty() || hasDeviations) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    text = "Actionable Insights",
+                    text = "Patterns & deviations",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
@@ -108,33 +100,37 @@ fun HomeScreen(
                     }
                 }
 
-                if (hasPredictions) {
-                    val top = state.predictions.first()
-                    ActionableInsightCard(
-                        title = "Next Likely Activity",
-                        description = "Based on your routine → ${top.appName} (${(top.confidence * 100).toInt()}%)",
-                        icon = Icons.Default.AutoAwesome,
-                        isCritical = false,
-                        accentColor = Color(0xFF38BDF8),
-                    )
+                state.discoveredHabits.take(2).forEach { habit ->
+                    HabitCard(habit = habit)
                 }
             }
         }
 
-        // Daily Summary Grid
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(
-                text = "Daily Summary",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            DailySummaryGrid(
-                screenTimeMs = state.todayScreenTimeMs,
-                expectedScreenTimeMs = state.expectedScreenTimeMs,
-                unlocks = state.todayUnlocks,
-                topApp = state.todayTopApp,
-                baselineStatus = state.baselineStatus,
+        // Context Section
+        state.latestContext?.let { ctx ->
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "Context",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                CompactContextBanner(
+                    context = ctx,
+                    hasNotificationPermission = state.hasNotificationPermission,
+                )
+            }
+        }
+
+        // Lower-priority predictions
+        if (hasPredictions) {
+            val top = state.predictions.first()
+            ActionableInsightCard(
+                title = "Next Likely Activity [Experimental]",
+                description = "Based on your routine → ${top.appName} (${(top.confidence * 100).toInt()}%)",
+                icon = Icons.Default.AutoAwesome,
+                isCritical = false,
+                accentColor = MaterialTheme.colorScheme.primary,
             )
         }
 
@@ -146,19 +142,190 @@ fun HomeScreen(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+fun FirstRunExperience(
+    state: HabitUiState,
+    viewModel: HabitViewModel,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
+        Text(
+            text = "Welcome to HabitMiner",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+
+        Text(
+            text = "I'm learning how your phone usage\nchanges throughout the day.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+
+        Box(
+            modifier =
+                Modifier
+                    .size(64.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        }
+
+        Text(
+            text = "No patterns yet",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+
+        Text(
+            text = "Keep using your phone normally.\nYour personal baseline will appear\nas enough data is collected.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+
+        if (state.isSyncing) {
+            Text("Syncing data...", color = MaterialTheme.colorScheme.primary)
         } else {
-            Button(
-                onClick = { viewModel.loadHistoricalData() },
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text("Sync Usage")
+            Button(onClick = { viewModel.loadHistoricalData() }) {
+                Text("Sync Usage Now")
             }
         }
     }
 }
 
 @Composable
-fun ContextHeroBanner(
+fun LearningStatusHeader(state: HabitUiState) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(8.dp)
+                            .background(Color(0xFF10B981), CircleShape),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Monitoring",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+
+            val statusText =
+                when {
+                    state.discoveredHabits.isNotEmpty() -> "${state.discoveredHabits.size} patterns learned"
+                    state.hasEnoughData -> "Your baseline is established"
+                    else -> "Learning your routine · Day ${state.daysOfData}"
+                }
+
+            Text(
+                text = statusText,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            )
+        }
+    }
+}
+
+@Composable
+fun TodayUsageCard(state: HabitUiState) {
+    val screenTimeMs = state.todayScreenTimeMs
+    val targetMs = if (state.expectedScreenTimeMs > 0L) state.expectedScreenTimeMs else -1L
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            // Neutral Baseline Presentation
+            val hours = screenTimeMs / (1000 * 60 * 60)
+            val mins = (screenTimeMs / (1000 * 60)) % 60
+
+            Text(
+                text = "Screen time",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            )
+            Text(
+                text = "${hours}h ${mins}m",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+
+            if (targetMs > 0) {
+                val tHours = targetMs / (1000 * 60 * 60)
+                val tMins = (targetMs / (1000 * 60)) % 60
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Typical for this period",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Text(
+                    text = "${tHours}h ${tMins}m",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+
+                val diffMs = screenTimeMs - targetMs
+                val diffSign = if (diffMs > 0) "+" else "−"
+                val diffMins = Math.abs(diffMs) / (1000 * 60)
+                val diffColor = if (diffMs > 0) MaterialTheme.colorScheme.error else Color(0xFF10B981)
+
+                Text(
+                    text = "$diffSign$diffMins min from typical",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = diffColor,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            } else {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Typical for this period",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Text(
+                    text = "Building...",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Top App Mini Chart
+            TopAppMiniChart(appUsages = state.todayUsageByApp)
+        }
+    }
+}
+
+@Composable
+fun CompactContextBanner(
     context: ContextSnapshotEntity,
     hasNotificationPermission: Boolean,
 ) {
@@ -166,11 +333,11 @@ fun ContextHeroBanner(
         if (context.accelVariance < 0f) {
             "❔ Unknown"
         } else if (context.accelVariance < 0.5f) {
-            "🧍 Low motion"
+            "🧍 Low activity"
         } else if (context.accelVariance < 2.0f) {
-            "🚶 Moderate motion"
+            "🚶 Moderate"
         } else {
-            "🏃 High motion"
+            "🏃 High activity"
         }
     val light =
         if (context.lightLux < 0) {
@@ -183,36 +350,33 @@ fun ContextHeroBanner(
             "🌑 Dark"
         }
     val batteryText = if (context.batteryLevel < 0) "Unavailable" else "${context.batteryLevel}%"
-    val notifications =
-        if (hasNotificationPermission && context.notificationsLastHour >= 0) {
-            " • 🔔 ${context.notificationsLastHour}"
+    val steps = if (context.stepsSinceLastSnapshot > 0) "👣 ${context.stepsSinceLastSnapshot} steps" else "👣 --"
+    val proximity =
+        if (context.proximityNear == true) {
+            "📱 Near"
+        } else if (context.proximityNear == false) {
+            "📱 Far"
         } else {
-            ""
+            "📱 --"
         }
 
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                    shape = RoundedCornerShape(24.dp),
-                )
-                .padding(20.dp),
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column {
-            Text(
-                text = "CURRENT CONTEXT",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(motion, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text(light, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            }
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "$motion • 🔋 $batteryText • $light$notifications",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(steps, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text("🔋 $batteryText", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(proximity, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -221,209 +385,45 @@ fun ContextHeroBanner(
 fun ActionableInsightCard(
     title: String,
     description: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     isCritical: Boolean,
-    accentColor: Color? = null,
+    accentColor: Color = if (isCritical) MaterialTheme.colorScheme.error else Color(0xFFF59E0B),
 ) {
-    val containerColor by animateColorAsState(
-        targetValue = if (isCritical) MaterialTheme.colorScheme.errorContainer else (accentColor?.copy(alpha = 0.15f) ?: Color(0x33F59E0B)),
-        label = "containerColor",
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (isCritical) MaterialTheme.colorScheme.onErrorContainer else (accentColor ?: Color(0xFFF59E0B)),
-        label = "contentColor",
-    )
-
     Card(
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = contentColor,
-                modifier = Modifier.size(32.dp),
-            )
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .background(accentColor.copy(alpha = 0.2f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
             Spacer(modifier = Modifier.width(16.dp))
             Column {
                 Text(
                     text = title,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = contentColor,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-            }
-        }
-    }
-}
-
-@Composable
-fun DailySummaryGrid(
-    screenTimeMs: Long,
-    expectedScreenTimeMs: Long,
-    unlocks: Int,
-    topApp: String,
-    baselineStatus: String,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        // Screen Time Ring
-        Card(
-            modifier = Modifier.weight(1f),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(24.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Screen Time",
-                    style = MaterialTheme.typography.titleSmall,
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                val hours = screenTimeMs / (1000 * 60 * 60)
-                val minutes = (screenTimeMs / (1000 * 60)) % 60
-
-                if (expectedScreenTimeMs > 0L) {
-                    val progress = (screenTimeMs.toFloat() / expectedScreenTimeMs).coerceIn(0f, 1f)
-                    val progressColor = if (progress > 0.8f) Color(0xFFF59E0B) else Color(0xFF38BDF8)
-
-                    Box(contentAlignment = Alignment.Center) {
-                        Canvas(modifier = Modifier.size(100.dp)) {
-                            drawArc(
-                                color = progressColor.copy(alpha = 0.2f),
-                                startAngle = 270f,
-                                sweepAngle = 360f,
-                                useCenter = false,
-                                style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round),
-                            )
-                            drawArc(
-                                color = progressColor,
-                                startAngle = 270f,
-                                sweepAngle = 360f * progress,
-                                useCenter = false,
-                                style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round),
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "${hours}h",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "${minutes}m",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            )
-                        }
-                    }
-                } else {
-                    Box(modifier = Modifier.size(100.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "${hours}h",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "${minutes}m",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Building baseline",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Unlocks & Top App
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Card(
-                modifier = Modifier.fillMaxWidth().height(88.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(20.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp).fillMaxSize(),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = "Unlocks",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "$unlocks",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth().height(88.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(20.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp).fillMaxSize(),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = "Top App",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = topApp.ifEmpty { "None" },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    )
-                }
             }
         }
     }
-
-    Text(
-        text = baselineStatus,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-    )
 }

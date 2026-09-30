@@ -22,4 +22,5 @@ data class AppUsageEntity(
     val timeSlot: String,
     val dayType: String,
     val previousPackageName: String? = null,
+    val isHistorical: Boolean = false,
 )

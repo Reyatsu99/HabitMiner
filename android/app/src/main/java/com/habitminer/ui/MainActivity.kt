@@ -10,11 +10,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -23,7 +25,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -40,6 +41,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        viewModel.checkPermissions()
+
         setContent {
             HabitMinerTheme {
                 val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -49,9 +52,9 @@ class MainActivity : ComponentActivity() {
 
                 Scaffold(
                     bottomBar = {
-                        if (state.hasUsagePermission) {
+                        if (state.hasUsagePermission && state.hasRuntimePermissions && state.hasNotificationPermission) {
                             NavigationBar(
-                                containerColor = Color(0xFF1E293B),
+                                containerColor = MaterialTheme.colorScheme.surface,
                             ) {
                                 NavigationBarItem(
                                     icon = { Icon(Icons.Default.Home, contentDescription = "Today") },
@@ -68,19 +71,17 @@ class MainActivity : ComponentActivity() {
                                     },
                                     colors =
                                         NavigationBarItemDefaults.colors(
-                                            selectedIconColor = Color(0xFF38BDF8),
-                                            unselectedIconColor = Color.LightGray,
-                                            selectedTextColor = Color(0xFF38BDF8),
-                                            unselectedTextColor = Color.LightGray,
-                                            indicatorColor = Color(0xFF0F172A),
+                                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                                         ),
                                 )
                                 NavigationBarItem(
-                                    icon = { Icon(Icons.Default.Psychology, contentDescription = "Habits") },
-                                    label = { Text("Habits") },
-                                    selected = currentRoute == Screen.Habits.route,
+                                    icon = { Icon(Icons.Default.History, contentDescription = "History") },
+                                    label = { Text("History") },
+                                    selected = currentRoute == Screen.History.route,
                                     onClick = {
-                                        navController.navigate(Screen.Habits.route) {
+                                        navController.navigate(Screen.History.route) {
                                             popUpTo(navController.graph.findStartDestination().id) {
                                                 saveState = true
                                             }
@@ -90,15 +91,13 @@ class MainActivity : ComponentActivity() {
                                     },
                                     colors =
                                         NavigationBarItemDefaults.colors(
-                                            selectedIconColor = Color(0xFF38BDF8),
-                                            unselectedIconColor = Color.LightGray,
-                                            selectedTextColor = Color(0xFF38BDF8),
-                                            unselectedTextColor = Color.LightGray,
-                                            indicatorColor = Color(0xFF0F172A),
+                                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                                         ),
                                 )
                                 NavigationBarItem(
-                                    icon = { Icon(Icons.Default.Analytics, contentDescription = "Insights") },
+                                    icon = { Icon(Icons.Default.Psychology, contentDescription = "Insights") },
                                     label = { Text("Insights") },
                                     selected = currentRoute == Screen.Insights.route,
                                     onClick = {
@@ -112,11 +111,29 @@ class MainActivity : ComponentActivity() {
                                     },
                                     colors =
                                         NavigationBarItemDefaults.colors(
-                                            selectedIconColor = Color(0xFF38BDF8),
-                                            unselectedIconColor = Color.LightGray,
-                                            selectedTextColor = Color(0xFF38BDF8),
-                                            unselectedTextColor = Color.LightGray,
-                                            indicatorColor = Color(0xFF0F172A),
+                                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        ),
+                                )
+                                NavigationBarItem(
+                                    icon = { Icon(Icons.Default.Sensors, contentDescription = "Health") },
+                                    label = { Text("Health") },
+                                    selected = currentRoute == Screen.Health.route,
+                                    onClick = {
+                                        navController.navigate(Screen.Health.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    colors =
+                                        NavigationBarItemDefaults.colors(
+                                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                                         ),
                                 )
                                 NavigationBarItem(
@@ -134,43 +151,48 @@ class MainActivity : ComponentActivity() {
                                     },
                                     colors =
                                         NavigationBarItemDefaults.colors(
-                                            selectedIconColor = Color(0xFF38BDF8),
-                                            unselectedIconColor = Color.LightGray,
-                                            selectedTextColor = Color(0xFF38BDF8),
-                                            unselectedTextColor = Color.LightGray,
-                                            indicatorColor = Color(0xFF0F172A),
+                                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                                         ),
                                 )
                             }
                         }
                     },
-                    containerColor = Color(0xFF0F172A),
+                    containerColor = MaterialTheme.colorScheme.background,
                 ) { innerPadding ->
                     Surface(
                         modifier = Modifier.padding(innerPadding),
-                        color = Color(0xFF0F172A),
+                        color = MaterialTheme.colorScheme.background,
                     ) {
-                        if (!state.hasUsagePermission) {
+                        if (!state.hasUsagePermission || !state.hasRuntimePermissions || !state.hasNotificationPermission) {
                             PermissionScreen(
                                 hasUsage = state.hasUsagePermission,
+                                hasRuntime = state.hasRuntimePermissions,
+                                hasNotification = state.hasNotificationPermission,
                                 onRequestUsage = {
                                     startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                                },
+                                onRuntimePermissionsGranted = {
+                                    viewModel.checkPermissions()
+                                },
+                                onRequestNotification = {
+                                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                                 },
                             )
                         } else {
                             NavHost(navController = navController, startDestination = Screen.Home.route) {
                                 composable(Screen.Home.route) { HomeScreen(state, viewModel) }
-                                composable(Screen.Habits.route) { HabitsScreen(state) }
+                                composable(Screen.History.route) { HistoryScreen(state) }
                                 composable(Screen.Insights.route) { InsightsScreen(state) }
                                 composable(Screen.Settings.route) {
                                     SettingsScreen(
                                         state = state,
                                         viewModel = viewModel,
-                                        onNavigateToDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
                                     )
                                 }
-                                composable(Screen.Diagnostics.route) {
-                                    DiagnosticScreen(state = state, onBack = { navController.popBackStack() })
+                                composable(Screen.Health.route) {
+                                    HealthScreen(state = state)
                                 }
                             }
                         }

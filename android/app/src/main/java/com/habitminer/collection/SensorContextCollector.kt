@@ -6,9 +6,9 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Handler
-import android.os.Looper
 import com.habitminer.data.ContextSnapshotEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.async
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
@@ -33,6 +33,13 @@ class SensorContextCollector
     ) {
         private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         private val prefs = context.getSharedPreferences("sensor_prefs", Context.MODE_PRIVATE)
+        private val sensorThread = android.os.HandlerThread("SensorThread").apply { start() }
+        private val sensorHandler = Handler(sensorThread.looper)
+
+        /** Called by MonitoringService.onDestroy() to stop the background thread cleanly. */
+        fun shutdown() {
+            sensorThread.quitSafely()
+        }
 
         suspend fun collectSnapshot(
             unlockCount: Int,
@@ -44,12 +51,27 @@ class SensorContextCollector
         ): ContextSnapshotEntity {
             val timestamp = System.currentTimeMillis()
 
-            // Keep unavailable sensor readings distinct from real darkness / stillness.
-            val lightLux = if (collectSensors) collectLightLevel() ?: -1f else -1f
-            val accelStats = if (collectSensors) collectMotionState(Sensor.TYPE_ACCELEROMETER) else null
-            val gyroStats = if (collectSensors) collectMotionState(Sensor.TYPE_GYROSCOPE) else null
-            val proximityNear = if (collectSensors) collectProximityState() else null
-            val stepsDelta = if (collectSensors) collectStepDelta() else -1
+            var lightLux = -1f
+            var accelStats: MotionStats? = null
+            var gyroStats: MotionStats? = null
+            var proximityNear: Boolean? = null
+            var stepsDelta = -1
+
+            if (collectSensors) {
+                kotlinx.coroutines.coroutineScope {
+                    val lightDeferred = async { collectLightLevel() }
+                    val accelDeferred = async { collectMotionState(Sensor.TYPE_ACCELEROMETER) }
+                    val gyroDeferred = async { collectMotionState(Sensor.TYPE_GYROSCOPE) }
+                    val proxDeferred = async { collectProximityState() }
+                    val stepDeferred = async { collectStepDelta() }
+
+                    lightLux = lightDeferred.await() ?: -1f
+                    accelStats = accelDeferred.await()
+                    gyroStats = gyroDeferred.await()
+                    proximityNear = proxDeferred.await()
+                    stepsDelta = stepDeferred.await()
+                }
+            }
 
             return ContextSnapshotEntity(
                 timestamp = timestamp,
@@ -102,8 +124,7 @@ class SensorContextCollector
                             ) {}
                         }
 
-                    val handler = Handler(Looper.getMainLooper())
-                    val registered = sensorManager.registerListener(listener, lightSensor, SensorManager.SENSOR_DELAY_NORMAL, handler)
+                    val registered = sensorManager.registerListener(listener, lightSensor, SensorManager.SENSOR_DELAY_NORMAL, sensorHandler)
                     if (!registered) {
                         continuation.resume(null)
                         return@suspendCancellableCoroutine
@@ -170,8 +191,9 @@ class SensorContextCollector
                             ) {}
                         }
 
-                    val handler = Handler(Looper.getMainLooper())
-                    val registered = sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME, handler)
+                    // SENSOR_DELAY_UI (~60ms) is more battery-efficient than SENSOR_DELAY_GAME (20ms)
+                    // for background 15-min sampling; still collects 12 samples within 2s timeout (BP-6)
+                    val registered = sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI, sensorHandler)
                     if (!registered) {
                         continuation.resume(null)
                         return@suspendCancellableCoroutine
@@ -210,8 +232,7 @@ class SensorContextCollector
                             ) {}
                         }
 
-                    val handler = Handler(Looper.getMainLooper())
-                    val registered = sensorManager.registerListener(listener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL, handler)
+                    val registered = sensorManager.registerListener(listener, proxSensor, SensorManager.SENSOR_DELAY_NORMAL, sensorHandler)
                     if (!registered) {
                         continuation.resume(null)
                         return@suspendCancellableCoroutine
@@ -222,8 +243,17 @@ class SensorContextCollector
                 }
             }
 
-        private suspend fun collectStepDelta(): Int =
-            withTimeoutOrNull(2000L) {
+        private suspend fun collectStepDelta(): Int {
+            if (
+                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.ACTIVITY_RECOGNITION,
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                return -1
+            }
+            return withTimeoutOrNull(2000L) {
                 suspendCancellableCoroutine { continuation ->
                     val stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
                     if (stepSensor == null) {
@@ -244,7 +274,7 @@ class SensorContextCollector
 
                                         if (lastSteps == -1 || currentSteps < lastSteps) {
                                             // Reboot or first time
-                                            continuation.resume(currentSteps)
+                                            continuation.resume(0)
                                         } else {
                                             continuation.resume(currentSteps - lastSteps)
                                         }
@@ -258,8 +288,7 @@ class SensorContextCollector
                             ) {}
                         }
 
-                    val handler = Handler(Looper.getMainLooper())
-                    val registered = sensorManager.registerListener(listener, stepSensor, SensorManager.SENSOR_DELAY_NORMAL, handler)
+                    val registered = sensorManager.registerListener(listener, stepSensor, SensorManager.SENSOR_DELAY_NORMAL, sensorHandler)
                     if (!registered) {
                         continuation.resume(-1)
                         return@suspendCancellableCoroutine
@@ -269,4 +298,5 @@ class SensorContextCollector
                     }
                 }
             } ?: -1
+        }
     }

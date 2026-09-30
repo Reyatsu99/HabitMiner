@@ -22,9 +22,9 @@ class HabitEngineTest {
 
         val now = System.currentTimeMillis()
 
-        // Create 3 days of activity interspersed with Home launcher
+        // Create 5 days of activity interspersed with Home launcher
         val usages = mutableListOf<AppUsageEntity>()
-        for (day in 0..3) {
+        for (day in 0..4) {
             val baseTime = now - (day * 24 * 60 * 60 * 1000L)
             usages.add(
                 AppUsageEntity(

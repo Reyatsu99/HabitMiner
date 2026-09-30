@@ -41,33 +41,44 @@ class DeviationDetector
                     "WEEKDAY"
                 }
             val groupedToday = validTodayUsage.groupBy { "${it.dayType}_${it.timeSlot}" }
-            val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+            val cal = java.util.Calendar.getInstance()
+            val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+            val minute = cal.get(java.util.Calendar.MINUTE)
+            val minuteOfDay = hour * 60 + minute
+
             val slotProgress =
                 mapOf(
                     "MORNING" to
                         when {
                             hour < 6 -> 0f
                             hour >= 12 -> 1f
-                            else -> (hour - 6) / 6f
+                            else -> (minuteOfDay - (6 * 60)) / (6 * 60f)
                         },
                     "AFTERNOON" to
                         when {
                             hour < 12 -> 0f
                             hour >= 17 -> 1f
-                            else -> (hour - 12) / 5f
+                            else -> (minuteOfDay - (12 * 60)) / (5 * 60f)
                         },
                     "EVENING" to
                         when {
                             hour < 17 -> 0f
                             hour >= 22 -> 1f
-                            else -> (hour - 17) / 5f
+                            else -> (minuteOfDay - (17 * 60)) / (5 * 60f)
+                        },
+                    "NIGHT" to
+                        when {
+                            hour in 6..21 -> 0f
+                            else -> {
+                                val mins = if (hour >= 22) (hour - 22) * 60 + minute else (hour + 2) * 60 + minute
+                                mins / (8 * 60f)
+                            }
                         },
                 )
 
             for ((bin, base) in baselineMap) {
                 if (!bin.startsWith("${todayDayType}_")) continue
                 val timeSlot = bin.substringAfter('_')
-                // NIGHT spans midnight; suppress it until aggregation is day-boundary aware.
                 val progress = slotProgress[timeSlot] ?: continue
                 if (progress <= 0f) continue
                 val usages = groupedToday[bin].orEmpty()

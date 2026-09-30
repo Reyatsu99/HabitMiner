@@ -41,7 +41,7 @@ class HabitEngine
                     }
 
                 val totalDays = groupedByDate.size
-                if (totalDays < 3) continue // need at least 3 days for a pattern
+                if (totalDays < 5) continue // need at least 5 days for a pattern
 
                 // Extract n-grams (size 2 and 3)
                 val patternCounts = mutableMapOf<List<UsageItem>, Int>()
@@ -67,10 +67,7 @@ class HabitEngine
                                 val pattern = sorted.subList(i, i + size).map { UsageItem(it.packageName, it.appName) }
                                 // simple deduplication of adjacent identical apps
                                 val cleanPattern =
-                                    pattern.filterIndexed {
-                                            index,
-                                            item,
-                                        ->
+                                    pattern.filterIndexed { index, item ->
                                         index == 0 || item.packageName != pattern[index - 1].packageName
                                     }
                                 if (cleanPattern.size >= 2 && seenToday.add(cleanPattern)) {
@@ -81,9 +78,36 @@ class HabitEngine
                     }
                 }
 
-                for ((pattern, count) in patternCounts) {
+                // Filter out subset patterns that are just sub-parts of a longer pattern with similar counts
+                val sortedPatterns = patternCounts.keys.sortedByDescending { it.size }
+                val filteredCounts = mutableMapOf<List<UsageItem>, Int>()
+
+                for (pattern in sortedPatterns) {
+                    val count = patternCounts[pattern] ?: 0
+                    // Check if this pattern is a subset of any already accepted larger pattern
+                    val isSubset =
+                        filteredCounts.keys.any { acceptedPattern ->
+                            // Check if pattern is a sublist of acceptedPattern
+                            var found = false
+                            if (acceptedPattern.size > pattern.size) {
+                                for (i in 0..acceptedPattern.size - pattern.size) {
+                                    if (acceptedPattern.subList(i, i + pattern.size) == pattern) {
+                                        found = true
+                                        break
+                                    }
+                                }
+                            }
+                            // If it's a subset and occurs roughly the same number of times (+/- 10%), it's redundant
+                            found && (count <= (filteredCounts[acceptedPattern] ?: 0) + 1)
+                        }
+                    if (!isSubset) {
+                        filteredCounts[pattern] = count
+                    }
+                }
+
+                for ((pattern, count) in filteredCounts) {
                     val confidence = count.toFloat() / totalDays
-                    if (count >= 3 && confidence >= 0.4f) {
+                    if (count >= 5 && confidence >= 0.4f) {
                         val dominantApp =
                             pattern.map { it.appName }
                                 .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: "App"
@@ -140,8 +164,12 @@ class HabitEngine
             val sorted = validUsage.sortedBy { it.startTime }
 
             for (i in 0 until sorted.size - 1) {
-                val from = sorted[i].appName
-                val to = sorted[i + 1].appName
+                val current = sorted[i]
+                val next = sorted[i + 1]
+                if (next.startTime - current.endTime > 15 * 60 * 1000L) continue
+
+                val from = current.appName
+                val to = next.appName
                 val key = "$from->$to"
                 transitions[key] = transitions.getOrDefault(key, 0) + 1
             }

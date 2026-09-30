@@ -49,6 +49,12 @@ interface AppUsageDao {
     @Query("SELECT COUNT(*) FROM app_usage")
     fun getUsageCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM app_usage WHERE isHistorical = 1")
+    fun getHistoricalUsageCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM app_usage WHERE isHistorical = 0")
+    fun getLiveUsageCount(): Flow<Int>
+
     @Query("SELECT COUNT(*) || ':' || COALESCE(MAX(endTime), 0) || ':' || COALESCE(SUM(durationMs), 0) FROM app_usage")
     suspend fun getUsageRevision(): String
 
@@ -75,6 +81,9 @@ interface AppUsageDao {
 
     @Query("SELECT MAX(endTime) FROM app_usage")
     suspend fun getLastInsertedTimestamp(): Long?
+
+    @Query("SELECT packageName FROM app_usage ORDER BY startTime DESC LIMIT 1")
+    suspend fun getLastUsedPackage(): String?
 
     @Query("SELECT packageName FROM app_usage WHERE packageName NOT IN (:launcherPackages) ORDER BY startTime DESC LIMIT 1")
     suspend fun getLastUsedNonLauncherPackage(launcherPackages: List<String>): String?

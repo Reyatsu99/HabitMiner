@@ -20,12 +20,18 @@ class BaselineBuilder
             allUsage: List<AppUsageEntity>,
             snapshots: List<ContextSnapshotEntity>,
         ): List<BaselineEntity> {
+            val startMs = allUsage.minOfOrNull { it.startTime } ?: return emptyList()
+            val endMs = System.currentTimeMillis()
             val validUsage = allUsage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
             val gson = Gson()
             val newBaselines = mutableListOf<BaselineEntity>()
             val groupedByBin = validUsage.groupBy { "${it.dayType}_${it.timeSlot}" }
 
             for ((bin, usagesInBin) in groupedByBin) {
+                val dayType = bin.substringBefore('_')
+                val calendarDays = countDaysOfType(startMs, endMs, dayType)
+                if (calendarDays < 5) continue
+
                 val groupedByDate =
                     usagesInBin.groupBy {
                         val cal = Calendar.getInstance()
@@ -33,23 +39,33 @@ class BaselineBuilder
                         "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.DAY_OF_YEAR)}"
                     }
 
-                val dataPointCount = groupedByDate.size
-                if (dataPointCount < 5) continue
-
                 val dailyDurations = mutableListOf<Long>()
                 val dailySessions = mutableListOf<Float>()
                 val categoryTotals = mutableMapOf<String, Long>()
 
                 for ((_, dailyUsages) in groupedByDate) {
-                    val totalDuration = dailyUsages.sumOf { it.durationMs }
+                    val totalDuration = dailyUsages.sumOf { it.durationMs }.coerceAtMost(21600000L) // Cap at 6 hours
                     dailyDurations.add(totalDuration)
                     dailySessions.add(dailyUsages.size.toFloat())
 
+                    // Distribute capped time across categories proportionally
+                    val rawTotal = dailyUsages.sumOf { it.durationMs }.coerceAtLeast(1L)
+                    val scaleFactor = totalDuration.toDouble() / rawTotal.toDouble()
+
                     dailyUsages.forEach {
-                        categoryTotals[it.appName] = categoryTotals.getOrDefault(it.appName, 0L) + it.durationMs
+                        val scaledDuration = (it.durationMs * scaleFactor).toLong()
+                        categoryTotals[it.appName] = categoryTotals.getOrDefault(it.appName, 0L) + scaledDuration
                     }
                 }
 
+                // Pad missing calendar days with zero usage
+                val missingDays = (calendarDays - groupedByDate.size).coerceAtLeast(0)
+                repeat(missingDays) {
+                    dailyDurations.add(0L)
+                    dailySessions.add(0f)
+                }
+
+                val dataPointCount = calendarDays
                 val avgDuration = dailyDurations.average()
                 val stdDuration = sqrt(dailyDurations.map { (it - avgDuration) * (it - avgDuration) }.average()).toLong()
 
@@ -103,6 +119,30 @@ class BaselineBuilder
                 newBaselines.add(newBaseline)
             }
             return newBaselines
+        }
+
+        private fun countDaysOfType(
+            startMs: Long,
+            endMs: Long,
+            dayType: String,
+        ): Int {
+            val cal = Calendar.getInstance()
+            cal.timeInMillis = startMs
+            cal.set(Calendar.HOUR_OF_DAY, 0)
+            cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
+            var count = 0
+            while (cal.timeInMillis <= endMs) {
+                val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+                val isWeekend = dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY
+                val currentDayType = if (isWeekend) "WEEKEND" else "WEEKDAY"
+                if (currentDayType == dayType) {
+                    count++
+                }
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+            }
+            return count.coerceAtLeast(1)
         }
 
         fun hasEnoughData(allUsage: List<AppUsageEntity>): Boolean {

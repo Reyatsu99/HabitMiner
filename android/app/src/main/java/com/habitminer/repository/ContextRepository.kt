@@ -7,6 +7,8 @@ import com.habitminer.data.ContextSnapshotEntity
 import com.habitminer.data.DeviceEventDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.sync.Mutex
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,9 +20,18 @@ class ContextRepository
         private val contextDao: ContextDao,
         private val deviceEventDao: DeviceEventDao,
     ) {
+        val collectionMutex = Mutex()
+
+        suspend fun shouldSkipContextCollection(): Boolean {
+            val latest = contextDao.getLatestSnapshot().firstOrNull()
+            return latest != null && (System.currentTimeMillis() - latest.timestamp) < 10 * 60 * 1000L
+        }
+
         fun getLatestSnapshot(): Flow<ContextSnapshotEntity?> = contextDao.getLatestSnapshot()
 
         fun getTodayUsage(startOfDayMs: Long): Flow<List<AppUsageEntity>> = appUsageDao.getTodayUsage(startOfDayMs)
+
+        fun getTodaySnapshots(startOfDayMs: Long): Flow<List<ContextSnapshotEntity>> = contextDao.getTodaySnapshots(startOfDayMs)
 
         fun getAllUsage(): Flow<List<AppUsageEntity>> = appUsageDao.getAllUsage()
 
@@ -42,12 +53,20 @@ class ContextRepository
 
         fun getUsageCountFlow(): Flow<Int> = appUsageDao.getUsageCount()
 
+        fun getHistoricalUsageCountFlow(): Flow<Int> = appUsageDao.getHistoricalUsageCount()
+
+        fun getLiveUsageCountFlow(): Flow<Int> = appUsageDao.getLiveUsageCount()
+
         fun getSnapshotCountFlow(): Flow<Int> = contextDao.getSnapshotCount()
 
         suspend fun getLastInsertedUsageTimestamp(): Long? = appUsageDao.getLastInsertedTimestamp()
 
         suspend fun getLastUsedNonLauncherPackage(launcherPackages: List<String>): String? =
-            appUsageDao.getLastUsedNonLauncherPackage(launcherPackages)
+            if (launcherPackages.isEmpty()) {
+                appUsageDao.getLastUsedPackage()
+            } else {
+                appUsageDao.getLastUsedNonLauncherPackage(launcherPackages)
+            }
 
         suspend fun getSnapshotRevision(): String = contextDao.getSnapshotRevision()
 

@@ -14,6 +14,9 @@ interface ContextDao {
     @Query("SELECT * FROM context_snapshots ORDER BY timestamp DESC LIMIT 1")
     fun getLatestSnapshot(): Flow<ContextSnapshotEntity?>
 
+    @Query("SELECT * FROM context_snapshots WHERE timestamp >= :startOfDayMs ORDER BY timestamp ASC")
+    fun getTodaySnapshots(startOfDayMs: Long): Flow<List<ContextSnapshotEntity>>
+
     @Query("SELECT * FROM context_snapshots WHERE timestamp >= :startMs AND timestamp <= :endMs ORDER BY timestamp ASC")
     suspend fun getSnapshotsForDateRange(
         startMs: Long,

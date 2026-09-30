@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DeviationEntity::class,
         DeviceEventEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                         AppDatabase::class.java,
                         "habitminer_database",
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                         .build()
                 instance = newInstance
                 newInstance
@@ -161,6 +161,12 @@ abstract class AppDatabase : RoomDatabase() {
                     database.execSQL("ALTER TABLE context_snapshots ADD COLUMN gyroEnergy REAL NOT NULL DEFAULT -1.0")
                     database.execSQL("ALTER TABLE context_snapshots ADD COLUMN proximityNear INTEGER DEFAULT NULL")
                     database.execSQL("ALTER TABLE context_snapshots ADD COLUMN stepsSinceLastSnapshot INTEGER NOT NULL DEFAULT -1")
+                }
+            }
+        private val MIGRATION_5_6 =
+            object : Migration(5, 6) {
+                override fun migrate(database: SupportSQLiteDatabase) {
+                    database.execSQL("ALTER TABLE app_usage ADD COLUMN isHistorical INTEGER NOT NULL DEFAULT 0")
                 }
             }
     }

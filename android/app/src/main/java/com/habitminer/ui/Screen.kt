@@ -3,11 +3,11 @@ package com.habitminer.ui
 sealed class Screen(val route: String) {
     object Home : Screen("home")
 
-    object Habits : Screen("habits")
+    object History : Screen("history")
 
     object Insights : Screen("insights")
 
     object Settings : Screen("settings")
 
-    object Diagnostics : Screen("diagnostics")
+    object Health : Screen("health")
 }
