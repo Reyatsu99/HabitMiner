@@ -52,10 +52,13 @@ class MonitoringService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     // Cache variables for rich notification
-    private var todayScreenTimeMs: Long = 0L
-    private var lastUsedApp: String = ""
-    private var lastContextTime: Long = 0L
-    private var activeSensors: Int = 5
+    @Volatile private var todayScreenTimeMs: Long = 0L
+
+    @Volatile private var lastUsedApp: String = ""
+
+    @Volatile private var lastContextTime: Long = 0L
+
+    @Volatile private var activeSensors: Int = 5
 
     companion object {
         const val ACTION_START = "com.habitminer.action.START"
@@ -76,6 +79,12 @@ class MonitoringService : Service() {
         super.onCreate()
         createNotificationChannel()
         isServiceRunning = true
+
+        // Initial population of the rich notification state to avoid "0m today" delay
+        serviceScope.launch {
+            updateRichNotificationState()
+            updateNotification()
+        }
 
         // Acquire a partial wakelock so Doze does not suspend the 15-min collection loop (BP-1)
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager

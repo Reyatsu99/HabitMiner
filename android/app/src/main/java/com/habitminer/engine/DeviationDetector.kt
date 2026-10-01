@@ -150,21 +150,40 @@ class DeviationDetector
                     )
                 }
 
-                // Context Shift Detection (New Feature)
+                // Calculate actual time slot boundaries to prevent false positives when usages is empty
+                val startOfDay =
+                    java.util.Calendar.getInstance().apply {
+                        set(java.util.Calendar.HOUR_OF_DAY, 0)
+                        set(java.util.Calendar.MINUTE, 0)
+                        set(java.util.Calendar.SECOND, 0)
+                        set(java.util.Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+
+                val (slotStartHour, slotEndHour) =
+                    when (timeSlot) {
+                        "MORNING" -> 6 to 12
+                        "AFTERNOON" -> 12 to 17
+                        "EVENING" -> 17 to 22
+                        "NIGHT" -> 22 to 30 // Up to 6am next day
+                        else -> 0 to 24
+                    }
+
+                val slotStartMs = startOfDay + slotStartHour * 3600000L
+                val slotEndMs = startOfDay + slotEndHour * 3600000L
+
+                // Context Shift Detection
                 val relevantContexts =
                     todayContexts.filter {
-                        it.timestamp >= usages.minOfOrNull { u -> u.startTime } ?: 0L &&
-                            it.timestamp <= usages.maxOfOrNull { u -> u.endTime } ?: Long.MAX_VALUE
+                        it.timestamp in slotStartMs..slotEndMs
                     }
 
                 if (relevantContexts.isNotEmpty()) {
                     val currentAvgLight = relevantContexts.map { it.lightLux.toDouble() }.average().toFloat()
-                    val activeCount = relevantContexts.count { it.accelEnergy > 5f }
+                    val activeCount = relevantContexts.count { it.accelEnergy > ACTIVE_ENERGY_THRESHOLD }
                     val currentActiveRatio = activeCount.toFloat() / relevantContexts.size
 
-                    // Simple accel energy proxy from baseline (assuming avgAccelEnergy > 5 is "active")
-                    val baselineActive = base.avgAccelEnergy > 5f
-                    val currentActive = currentActiveRatio > 0.3f // 30% of snapshots active
+                    val baselineActive = base.avgAccelEnergy > ACTIVE_ENERGY_THRESHOLD
+                    val currentActive = currentActiveRatio > ACTIVE_RATIO_THRESHOLD
 
                     if (baselineActive && !currentActive && base.avgAccelEnergy > 10f) {
                         results.add(
@@ -195,10 +214,10 @@ class DeviationDetector
                     }
 
                     // Light shift detection (dark vs bright)
-                    val baselineDark = base.avgLightLux < 20f
-                    val currentDark = currentAvgLight < 20f
-                    val baselineBright = base.avgLightLux > 500f
-                    val currentBright = currentAvgLight > 500f
+                    val baselineDark = base.avgLightLux < DARKNESS_THRESHOLD_LUX
+                    val currentDark = currentAvgLight < DARKNESS_THRESHOLD_LUX
+                    val baselineBright = base.avgLightLux > BRIGHTNESS_THRESHOLD_LUX
+                    val currentBright = currentAvgLight > BRIGHTNESS_THRESHOLD_LUX
 
                     if (baselineDark && currentBright) {
                         results.add(
@@ -257,5 +276,12 @@ class DeviationDetector
         private fun formatDuration(milliseconds: Long): String {
             val minutes = (milliseconds / 60_000).coerceAtLeast(1)
             return if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m" else "${minutes}m"
+        }
+
+        companion object {
+            const val ACTIVE_ENERGY_THRESHOLD = 5f
+            const val ACTIVE_RATIO_THRESHOLD = 0.3f
+            const val DARKNESS_THRESHOLD_LUX = 20f
+            const val BRIGHTNESS_THRESHOLD_LUX = 500f
         }
     }
