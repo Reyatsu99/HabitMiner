@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import com.habitminer.data.DeviceEventDao
 import com.habitminer.data.DeviceEventEntity
+import com.habitminer.data.PrefsKeys
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,8 +26,8 @@ class DeviceEventReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             DataCollectionWorker.schedulePeriodicWork(context)
 
-            val preferences = context.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
-            if (preferences.getBoolean("collection_enabled", true)) {
+            val preferences = context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+            if (preferences.getBoolean(PrefsKeys.COLLECTION_ENABLED, true)) {
                 val serviceIntent =
                     Intent(context, MonitoringService::class.java).apply {
                         action = MonitoringService.ACTION_START

@@ -14,6 +14,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.habitminer.data.DeviceEventDao
+import com.habitminer.data.PrefsKeys
 import com.habitminer.domain.AppIdentityResolver
 import com.habitminer.repository.ContextRepository
 import com.habitminer.ui.MainActivity
@@ -146,8 +147,8 @@ class MonitoringService : Service() {
     }
 
     private suspend fun collectContextSnapshot() {
-        val preferences = getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
-        if (!preferences.getBoolean("collection_enabled", true)) {
+        val preferences = getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        if (!preferences.getBoolean(PrefsKeys.COLLECTION_ENABLED, true)) {
             stopSelf()
             return
         }
@@ -243,8 +244,8 @@ class MonitoringService : Service() {
     }
 
     private fun buildNotification(): Notification {
-        val preferences = getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
-        val isMissingPermissions = !preferences.getBoolean("has_all_permissions", true)
+        val preferences = getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        val isMissingPermissions = !preferences.getBoolean(PrefsKeys.HAS_ALL_PERMISSIONS, true)
 
         val title: String
         val content: String
@@ -316,7 +317,7 @@ class MonitoringService : Service() {
                 }
 
             // Learning status
-            val daysOfData = preferences.getInt("days_of_data", 0)
+            val daysOfData = preferences.getInt(PrefsKeys.DAYS_OF_DATA, 0)
             val learningStatus = if (daysOfData >= 5) "Model up to date" else "Building baseline: $daysOfData/5 days"
 
             inboxStyle.addLine("Status: 🟢 Active")

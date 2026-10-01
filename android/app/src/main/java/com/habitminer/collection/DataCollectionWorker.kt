@@ -14,6 +14,7 @@ import androidx.work.WorkerParameters
 import com.habitminer.data.AppUsageDao
 import com.habitminer.data.ContextDao
 import com.habitminer.data.DeviceEventDao
+import com.habitminer.data.PrefsKeys
 import com.habitminer.domain.AppIdentityResolver
 import com.habitminer.repository.ContextRepository
 import dagger.assisted.Assisted
@@ -41,12 +42,12 @@ class DataCollectionWorker
         override suspend fun doWork(): Result =
             workerMutex.withLock {
                 try {
-                    val preferences = appContext.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
-                    if (!preferences.getBoolean("collection_enabled", true)) {
+                    val preferences = appContext.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+                    if (!preferences.getBoolean(PrefsKeys.COLLECTION_ENABLED, true)) {
                         return@withLock Result.success()
                     }
 
-                    val retentionDays = preferences.getInt("retention_days", 90).coerceIn(30, 180)
+                    val retentionDays = preferences.getInt(PrefsKeys.RETENTION_DAYS, 90).coerceIn(30, 180)
                     val retentionCutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(retentionDays.toLong())
                     usageDao.deleteOlderThan(retentionCutoff)
                     contextDao.deleteOlderThan(retentionCutoff)

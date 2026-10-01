@@ -16,6 +16,7 @@ import com.habitminer.data.AppUsageEntity
 import com.habitminer.data.ContextSnapshotEntity
 import com.habitminer.data.DeviationEntity
 import com.habitminer.data.DiscoveredHabitEntity
+import com.habitminer.data.PrefsKeys
 import com.habitminer.domain.AppIdentityResolver
 import com.habitminer.repository.ContextRepository
 import com.habitminer.repository.HabitRepository
@@ -128,11 +129,11 @@ class HabitViewModel
             val hasUsage = mode == AppOpsManager.MODE_ALLOWED
             val hasNotif = HabitNotificationListener.isEnabled(application)
             val retentionDays =
-                application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
-                    .getInt("retention_days", 90).coerceIn(30, 180)
+                application.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+                    .getInt(PrefsKeys.RETENTION_DAYS, 90).coerceIn(30, 180)
             val collectionEnabled =
-                application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
-                    .getBoolean("collection_enabled", true)
+                application.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+                    .getBoolean(PrefsKeys.COLLECTION_ENABLED, true)
 
             val hasRuntime =
                 buildList {
@@ -161,8 +162,8 @@ class HabitViewModel
         fun loadHistoricalData() {
             if (!_uiState.value.hasUsagePermission) return
             val application = getApplication<Application>()
-            application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
-                .edit().putBoolean("collection_enabled", true).apply()
+            application.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putBoolean(PrefsKeys.COLLECTION_ENABLED, true).apply()
             synchronizeUsageAndModel()
         }
 
@@ -206,7 +207,7 @@ class HabitViewModel
                         android.util.Log.w("HabitMiner", "Could not start MonitoringService: ${e.message}")
                     }
 
-                    val preferences = application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
+                    val preferences = application.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
                     var labelsChanged = false
                     if (!preferences.getBoolean("stored_labels_resolved", false)) {
                         contextRepository.getPackagesWithFallbackNames().forEach { packageName ->
@@ -224,11 +225,11 @@ class HabitViewModel
                         refreshHabits()
                         preferences.edit()
                             .putString("source_revision", revision)
-                            .putInt("days_of_data", _uiState.value.daysOfData)
+                            .putInt(PrefsKeys.DAYS_OF_DATA, _uiState.value.daysOfData)
                             .putFloat("predictability_score", _uiState.value.predictabilityScore)
                             .apply()
                     } else {
-                        val days = preferences.getInt("days_of_data", 0)
+                        val days = preferences.getInt(PrefsKeys.DAYS_OF_DATA, 0)
                         val existingBaselines = habitRepository.getAllBaselines().first()
                         val hasEnough = days >= 5 || existingBaselines.isNotEmpty()
                         _uiState.update {
@@ -255,8 +256,8 @@ class HabitViewModel
         fun setRetentionDays(days: Int) {
             val normalizedDays = days.coerceIn(30, 180)
             val application = getApplication<Application>()
-            application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE)
-                .edit().putInt("retention_days", normalizedDays).apply()
+            application.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putInt(PrefsKeys.RETENTION_DAYS, normalizedDays).apply()
             _uiState.update { it.copy(retentionDays = normalizedDays) }
             DataCollectionWorker.runOnce(application)
         }
@@ -266,12 +267,12 @@ class HabitViewModel
                 contextRepository.clearCollectedData()
                 habitRepository.clearModelData()
                 val application = getApplication<Application>()
-                application.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE).edit()
+                application.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE).edit()
                     .remove("source_revision")
-                    .remove("days_of_data")
+                    .remove(PrefsKeys.DAYS_OF_DATA)
                     .remove("predictability_score")
                     .remove("stored_labels_resolved")
-                    .putBoolean("collection_enabled", false)
+                    .putBoolean(PrefsKeys.COLLECTION_ENABLED, false)
                     .apply()
                 _uiState.update {
                     HabitUiState(
@@ -536,7 +537,7 @@ class HabitViewModel
 
                 // Clear all SharedPreferences caches
                 app.getSharedPreferences("sensor_prefs", Context.MODE_PRIVATE).edit().clear().commit()
-                app.getSharedPreferences("habitminer_model", Context.MODE_PRIVATE).edit().clear().commit()
+                app.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit()
 
                 // Reset state flow UI flags if necessary
                 initialCollectionStarted = false
