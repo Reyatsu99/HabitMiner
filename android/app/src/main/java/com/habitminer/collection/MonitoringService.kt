@@ -368,8 +368,8 @@ class MonitoringService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
-        // Shutdown the sensor HandlerThread cleanly (CRITICAL-3)
-        sensorCollector.shutdown()
+        // DO NOT call sensorCollector.shutdown() here. It's a @Singleton so its HandlerThread
+        // must outlive this service lifecycle to support DataCollectionWorker and future restarts.
         serviceScope.cancel()
         // Release wakelock (BP-1)
         wakeLock?.let { if (it.isHeld) it.release() }

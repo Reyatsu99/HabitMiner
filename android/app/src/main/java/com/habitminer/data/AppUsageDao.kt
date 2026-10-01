@@ -13,7 +13,7 @@ data class CategoryDuration(
 
 @Dao
 interface AppUsageDao {
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(usage: AppUsageEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

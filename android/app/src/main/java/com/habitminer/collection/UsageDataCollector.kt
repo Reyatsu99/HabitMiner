@@ -125,6 +125,7 @@ class UsageDataCollector
 
             val result = mutableListOf<AppUsageEntity>()
             val startTimes = mutableMapOf<String, Long>()
+            val activeClasses = mutableMapOf<String, MutableSet<String>>()
 
             // Pre-compute event type constants outside the hot loop
             val foregroundEvent =
@@ -156,12 +157,14 @@ class UsageDataCollector
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
                 val pkg = event.packageName
+                val cls = event.className ?: "unknown_class"
 
                 // If screen turns off or device shuts down, close all active sessions
                 if (event.eventType == screenOffEvent || event.eventType == keyguardShownEvent || event.eventType == deviceShutdownEvent) {
                     val activePkgs = startTimes.keys.toList()
                     for (activePkg in activePkgs) {
                         val start = startTimes.remove(activePkg)
+                        activeClasses.remove(activePkg)
                         if (start != null) {
                             val duration = event.timeStamp - start
                             if (duration > 2000) {
@@ -192,31 +195,46 @@ class UsageDataCollector
                 }
 
                 if (event.eventType == foregroundEvent) {
-                    startTimes[pkg] = event.timeStamp
+                    val classes = activeClasses.getOrPut(pkg) { mutableSetOf() }
+                    val wasEmpty = classes.isEmpty()
+                    classes.add(cls)
+                    if (wasEmpty) {
+                        startTimes[pkg] = event.timeStamp
+                    }
                 } else if (event.eventType == backgroundEvent || event.eventType == stoppedEvent) {
-                    val start = startTimes.remove(pkg)
-                    if (start != null) {
-                        val duration = event.timeStamp - start
-                        if (duration > 2000) { // filter > 2000ms
-                            val cal = Calendar.getInstance().apply { timeInMillis = start }
-                            val hour = cal.get(Calendar.HOUR_OF_DAY)
-                            val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+                    val classes = activeClasses[pkg]
+                    if (classes != null) {
+                        classes.remove(cls)
+                        if (classes.isEmpty()) {
+                            activeClasses.remove(pkg)
+                            val start = startTimes.remove(pkg)
+                            if (start != null) {
+                                val duration = event.timeStamp - start
+                                if (duration > 2000) { // filter > 2000ms
+                                    val cal = Calendar.getInstance().apply { timeInMillis = start }
+                                    val hour = cal.get(Calendar.HOUR_OF_DAY)
+                                    val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
 
-                            result.add(
-                                AppUsageEntity(
-                                    id = stableSessionId(pkg, start),
-                                    packageName = pkg,
-                                    appName = appIdentityResolver.getAppName(pkg),
-                                    appCategory = getCategoryForPackage(pkg),
-                                    startTime = start,
-                                    endTime = event.timeStamp,
-                                    durationMs = duration,
-                                    timeSlot = getTimeSlot(hour),
-                                    dayType = getDayType(dayOfWeek),
-                                    isHistorical = isHistorical,
-                                ),
-                            )
+                                    result.add(
+                                        AppUsageEntity(
+                                            id = stableSessionId(pkg, start),
+                                            packageName = pkg,
+                                            appName = appIdentityResolver.getAppName(pkg),
+                                            appCategory = getCategoryForPackage(pkg),
+                                            startTime = start,
+                                            endTime = event.timeStamp,
+                                            durationMs = duration,
+                                            timeSlot = getTimeSlot(hour),
+                                            dayType = getDayType(dayOfWeek),
+                                            isHistorical = isHistorical,
+                                        ),
+                                    )
+                                }
+                            }
                         }
+                    } else {
+                        // Fallback: If we missed the foreground event, just clear start times if any
+                        startTimes.remove(pkg)
                     }
                 }
             }
