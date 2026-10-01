@@ -49,7 +49,9 @@ class BaselineBuilder
                     dailySessions.add(dailyUsages.size.toFloat())
 
                     // Distribute capped time across categories proportionally
-                    val rawTotal = dailyUsages.sumOf { it.durationMs }.coerceAtLeast(1L)
+                    val rawTotal = dailyUsages.sumOf { it.durationMs }
+                    if (rawTotal <= 0L) continue
+
                     val scaleFactor = totalDuration.toDouble() / rawTotal.toDouble()
 
                     dailyUsages.forEach {

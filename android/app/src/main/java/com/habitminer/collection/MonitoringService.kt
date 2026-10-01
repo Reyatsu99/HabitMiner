@@ -82,7 +82,7 @@ class MonitoringService : Service() {
             pm.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "HabitMiner::MonitoringLock",
-            ).also { it.acquire() }
+            ).also { it.acquire(4 * 60 * 60 * 1000L) }
     }
 
     override fun onStartCommand(

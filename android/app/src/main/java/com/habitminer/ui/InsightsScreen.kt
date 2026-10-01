@@ -3,7 +3,6 @@
 package com.habitminer.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -115,7 +114,7 @@ fun InsightsScreen(state: HabitUiState) {
                         text = "${state.discoveredHabits.size} patterns discovered  ·  View all →",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 8.dp).clickable { /* TODO */ },
+                        modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
             }
@@ -144,7 +143,7 @@ fun InsightsScreen(state: HabitUiState) {
                         text = "${state.recentDeviations.size} recent deviations  ·  View all →",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 8.dp).clickable { /* TODO */ },
+                        modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
             }
