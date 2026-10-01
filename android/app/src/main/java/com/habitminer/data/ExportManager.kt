@@ -19,6 +19,8 @@ class ExportManager
         private val appUsageDao: AppUsageDao,
         private val contextDao: ContextDao,
         private val habitDao: HabitDao,
+        private val baselineDao: BaselineDao,
+        private val deviationDao: DeviationDao,
     ) {
         suspend fun exportDataToCsv(): String? {
             try {
@@ -36,9 +38,11 @@ class ExportManager
                     writer.append("id,packageName,appName,appCategory,startTime,endTime,")
                     writer.append("durationMs,timeSlot,dayType,previousPackageName,isHistorical\n")
                     usages.forEach {
-                        writer.append("${it.id},${it.packageName},\"${it.appName}\",${it.appCategory},${it.startTime},")
+                        writer.append(
+                            "${it.id},${escapeCsv(it.packageName)},${escapeCsv(it.appName)},${escapeCsv(it.appCategory)},${it.startTime},",
+                        )
                         writer.append("${it.endTime},${it.durationMs},${it.timeSlot},${it.dayType},")
-                        writer.append("${it.previousPackageName ?: ""},${it.isHistorical}\n")
+                        writer.append("${escapeCsv(it.previousPackageName ?: "")},${it.isHistorical}\n")
                     }
                 }
 
@@ -65,9 +69,40 @@ class ExportManager
                     writer.append("id,habitName,patternDescription,appSequence,confidence,")
                     writer.append("occurrenceCount,timeSlot,dayType,discoveredAt,lastSeenAt\n")
                     habits.forEach {
-                        writer.append("${it.id},\"${it.habitName}\",\"${it.patternDescription}\",")
-                        writer.append("\"${it.appSequence.replace("\"", "\"\"")}\",${it.confidence},")
+                        writer.append("${it.id},${escapeCsv(it.habitName)},${escapeCsv(it.patternDescription)},")
+                        writer.append("${escapeCsv(it.appSequence)},${it.confidence},")
                         writer.append("${it.occurrenceCount},${it.timeSlot},${it.dayType},${it.discoveredAt},${it.lastSeenAt}\n")
+                    }
+                }
+
+                // 4. Export Baselines
+                val baselinesFile = File(exportDir, "baselines_$timestamp.csv")
+                val baselines = baselineDao.getAllBaselines().firstOrNull() ?: emptyList()
+                FileWriter(baselinesFile).use { writer ->
+                    writer.append("timeBin,avgScreenTimeMs,stdScreenTimeMs,avgSessionCount,stdSessionCount,")
+                    writer.append("avgUnlockCount,typicalCategoriesJson,avgAccelEnergy,avgLightLux,updatedAt,dataPointCount\n")
+                    baselines.forEach {
+                        writer.append(
+                            "${escapeCsv(
+                                it.timeBin,
+                            )},${it.avgScreenTimeMs},${it.stdScreenTimeMs},${it.avgSessionCount},${it.stdSessionCount},",
+                        )
+                        writer.append(
+                            "${it.avgUnlockCount},${escapeCsv(
+                                it.typicalCategoriesJson,
+                            )},${it.avgAccelEnergy},${it.avgLightLux},${it.updatedAt},${it.dataPointCount}\n",
+                        )
+                    }
+                }
+
+                // 5. Export Deviations
+                val deviationsFile = File(exportDir, "deviations_$timestamp.csv")
+                val deviations = deviationDao.getRecentDeviations(Int.MAX_VALUE).firstOrNull() ?: emptyList()
+                FileWriter(deviationsFile).use { writer ->
+                    writer.append("id,timestamp,timeBin,deviationType,description,zScore,normalizedScore,affectedCategory\n")
+                    deviations.forEach {
+                        writer.append("${it.id},${it.timestamp},${escapeCsv(it.timeBin)},${escapeCsv(it.deviationType)},")
+                        writer.append("${escapeCsv(it.description)},${it.zScore},${it.normalizedScore},${escapeCsv(it.affectedCategory)}\n")
                     }
                 }
 
@@ -76,5 +111,12 @@ class ExportManager
                 e.printStackTrace()
                 return null
             }
+        }
+
+        private fun escapeCsv(value: String): String {
+            if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+                return "\"" + value.replace("\"", "\"\"") + "\""
+            }
+            return value
         }
     }
