@@ -324,7 +324,8 @@ class HabitViewModel
             val predictability = habitEngine.computePredictabilityScore(historicalUsage)
 
             // Deviations
-            val deviationsResult = deviationDetector.detectDeviations(todayUsage, newBaselines)
+            val todayContexts = snapshots.filter { it.timestamp >= startOfDay }
+            val deviationsResult = deviationDetector.detectDeviations(todayUsage, todayContexts, newBaselines)
 
             val daysOfData = baselineBuilder.getDaysOfData(allUsage)
             val existingBaselines = habitRepository.getAllBaselines().first()
@@ -398,7 +399,8 @@ class HabitViewModel
 
                                     // Evaluate today's deviations dynamically
                                     val currentBaselines = habitRepository.getAllBaselines().first()
-                                    val deviationsResult = deviationDetector.detectDeviations(usage, currentBaselines)
+                                    val todayContexts = contextRepository.getTodaySnapshots(startOfDay).first()
+                                    val deviationsResult = deviationDetector.detectDeviations(usage, todayContexts, currentBaselines)
                                     habitRepository.deleteDeviationsSince(startOfDay)
                                     deviationsResult.forEach { dev ->
                                         habitRepository.insertDeviation(

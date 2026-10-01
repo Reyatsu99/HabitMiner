@@ -25,6 +25,7 @@ class DeviationDetector
 
         fun detectDeviations(
             todayUsage: List<AppUsageEntity>,
+            todayContexts: List<com.habitminer.data.ContextSnapshotEntity>,
             baseline: List<BaselineEntity>,
         ): List<DeviationResult> {
             val validTodayUsage = todayUsage.filterNot { appIdentityResolver.isLauncher(it.packageName) }
@@ -147,6 +148,85 @@ class DeviationDetector
                             affectedCategory = "ALL",
                         ),
                     )
+                }
+
+                // Context Shift Detection (New Feature)
+                val relevantContexts =
+                    todayContexts.filter {
+                        it.timestamp >= usages.minOfOrNull { u -> u.startTime } ?: 0L &&
+                            it.timestamp <= usages.maxOfOrNull { u -> u.endTime } ?: Long.MAX_VALUE
+                    }
+
+                if (relevantContexts.isNotEmpty()) {
+                    val currentAvgLight = relevantContexts.map { it.lightLux.toDouble() }.average().toFloat()
+                    val activeCount = relevantContexts.count { it.accelEnergy > 5f }
+                    val currentActiveRatio = activeCount.toFloat() / relevantContexts.size
+
+                    // Simple accel energy proxy from baseline (assuming avgAccelEnergy > 5 is "active")
+                    val baselineActive = base.avgAccelEnergy > 5f
+                    val currentActive = currentActiveRatio > 0.3f // 30% of snapshots active
+
+                    if (baselineActive && !currentActive && base.avgAccelEnergy > 10f) {
+                        results.add(
+                            DeviationResult(
+                                timeBin = bin,
+                                deviationType = "CONTEXT_SHIFT",
+                                description =
+                                    "You are usually active during your $timeSlot " +
+                                        "routine, but today you are stationary.",
+                                zScore = 1.8f,
+                                normalizedScore = 0.75f,
+                                affectedCategory = "ALL",
+                            ),
+                        )
+                    } else if (!baselineActive && currentActive && currentActiveRatio > 0.6f) {
+                        results.add(
+                            DeviationResult(
+                                timeBin = bin,
+                                deviationType = "CONTEXT_SHIFT",
+                                description =
+                                    "You are usually stationary during your $timeSlot " +
+                                        "routine, but today you are highly active.",
+                                zScore = 1.8f,
+                                normalizedScore = 0.75f,
+                                affectedCategory = "ALL",
+                            ),
+                        )
+                    }
+
+                    // Light shift detection (dark vs bright)
+                    val baselineDark = base.avgLightLux < 20f
+                    val currentDark = currentAvgLight < 20f
+                    val baselineBright = base.avgLightLux > 500f
+                    val currentBright = currentAvgLight > 500f
+
+                    if (baselineDark && currentBright) {
+                        results.add(
+                            DeviationResult(
+                                timeBin = bin,
+                                deviationType = "CONTEXT_SHIFT",
+                                description =
+                                    "Your $timeSlot routine is usually in dark " +
+                                        "environments, but today it is bright.",
+                                zScore = 1.6f,
+                                normalizedScore = 0.65f,
+                                affectedCategory = "ALL",
+                            ),
+                        )
+                    } else if (baselineBright && currentDark) {
+                        results.add(
+                            DeviationResult(
+                                timeBin = bin,
+                                deviationType = "CONTEXT_SHIFT",
+                                description =
+                                    "Your $timeSlot routine is usually in bright " +
+                                        "environments, but today it is dark.",
+                                zScore = 1.6f,
+                                normalizedScore = 0.65f,
+                                affectedCategory = "ALL",
+                            ),
+                        )
+                    }
                 }
             }
 
